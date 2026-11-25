@@ -19,6 +19,39 @@ State lives in `var/broker.db` and `var/provider.db`. Stop and restart the
 server with the same `--data-dir` and nothing is lost: simulated time resumes
 where it stopped and provider nodes keep billing in between.
 
+## Trace replay
+
+```bash
+broker-replay --out docs/RESULTS.md   # about 20 seconds; --quick skips sensitivity runs
+```
+
+Full tables: [docs/RESULTS.md](docs/RESULTS.md). Each figure is a mean over 5
+provider seeds, because one seed is noisy (p90 wait moves by about 40 minutes
+between seeds).
+
+What the replay shows:
+
+- **Fair share moves the wait onto the team causing it.** On 2025-03-05
+  `vision` submits 167 jobs in under 3 hours. Under FIFO, `platform`'s p90
+  wait is 59 minutes; under fair share it is 13. `vision`'s own p90 rises from
+  87 to 100 minutes. The overall p90 looks worse under fair share only because
+  `vision` is 53% of all jobs. Cost is the same within noise.
+- **Most jobs start in about the boot time.** Median wait is 7 minutes, and
+  65% of jobs start within the ML engineers' 10 minutes. Every team except
+  `vision` has a p90 of 8 to 15 minutes; the misses are cold starts plus the
+  burst.
+- **Idle share is 26%,** against Finance's "about a third". It is reported
+  per team, so the teams that cause it can see it.
+- **The burst wait is a node-slot problem, not a GPU problem.** The burst
+  needs about 95 GPU-hours over 3 hours; 10 slots could supply 240. Arrivals
+  trickle in, so the slots fill with small nodes. Launching only large nodes
+  once 8 of 10 slots are used cuts p90 from 86 to 71 minutes for 11% more
+  cost. It is available but off by default (see DECISIONS.md, section 5).
+- **A longer idle timeout does not buy shorter waits.** 20 to 30 minutes adds
+  about 10% cost with no wait improvement, so the default is 5 minutes.
+- **Interruptible nodes for `low` jobs save about 7%** of the bill with no
+  measurable effect on waits.
+
 ## HTTP API
 
 Times are ISO 8601 UTC. Simulated time moves only through `POST /clock/advance`.

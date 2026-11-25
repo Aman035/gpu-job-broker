@@ -89,6 +89,11 @@ exponentially decayed sum with a 4-hour half-life.
   teams with work). With no contention, any team may use all 10.
 - *Free slots first:* when the cap blocks a waiting team, idle nodes of any
   team are terminated immediately instead of waiting for the idle timeout.
+- *Hand over a slot without pre-emption:* a busy team keeps refilling its own
+  nodes, so none ever empties and a blocked team would wait for the whole
+  backlog. When a team under its share is blocked, the over-share team's node
+  expected to free up soonest stops receiving new jobs; once its running jobs
+  finish, the slot goes to the waiting team.
 
 The trace is a real test of this: on 2025-03-05 `vision` submits about 187
 jobs within an hour. Under FIFO everyone else waits behind that burst. The
@@ -108,6 +113,14 @@ replay compares the two policies.
   `gpu-s` costs 1.00/h, `gpu-m` 1.125/h and `gpu-l` 1.0625/h, so packing a
   backlog onto one node costs almost nothing extra and saves node slots,
   which are the real constraint under the 10-node cap.
+- **Not done by default: large nodes under slot pressure.** In the replay,
+  `vision`'s burst trickles in at about one job a minute and fills the 10
+  slots with small nodes (about 55 of 80 possible GPUs). Launching only
+  `gpu-l` once 8 of 10 slots are used cuts p90 wait from 86 to 71 minutes but
+  raises the weekly bill by 11% and idle share to 34% (docs/RESULTS.md). The wait falls on
+  the team causing the burst while fair share protects everyone else, so I
+  leave it as an opt-in setting (`slot_pressure_fraction`) for that team and
+  Finance to decide on, rather than a default everyone pays for.
 
 ## 6. Provider failures
 
@@ -146,14 +159,18 @@ both numbers so the choice can be revisited with data.
 ## 8. Idle reaper
 
 - A node with no running or reserved jobs for more than `idle_timeout`
-  (default 10 minutes, configurable) is terminated.
+  (default 5 minutes, configurable) is terminated.
 - **Never before the 10-minute billing minimum:** an idle node younger than
   10 minutes is already paid for, so it stays warm until then for free.
 - Draining interruptible nodes and nodes still booting are not reaped (the
   boot timeout handles stuck nodes).
 
-The replay sweeps the timeout to show the cost-against-wait curve; the
-default is a judgement on that curve, not a guess.
+The default comes from the replay sweep (docs/RESULTS.md): 20 and 30 minutes
+add about 10% cost and do not shorten waits, because arrivals are bursty with
+long gaps and a warm node is rarely reused in time. 5 and 10 minutes cost the
+same within seed noise and 5 has the better waits. 0 is about 4% cheaper but
+is the most fragile: a job arriving a minute after a reap pays a full cold
+start.
 
 ## 9. Restart safety
 
@@ -182,8 +199,8 @@ default is a judgement on that curve, not a guess.
 | Rows not sorted by time | many | Sort by `submitted_at`; ties keep file order. |
 | `gpus = 3` | 1 | **Rejected**, as the API would reject it (the brief allows 1, 2, 4, 8). Silently rounding up to 4 would bill the team for a GPU it did not ask for. |
 | `gpus = 16` | 1 | **Rejected**: it cannot fit on any node. |
-| Same team, same second, every field identical | 11 pairs | Treated as **client retries** of one submission and deduplicated through the idempotency key (row content hash). Two genuinely separate jobs matching on runtime and outcome to the minute is unlikely. Replay prints the count either way and `--keep-duplicates` turns it off. |
-| Same team, same second, different fields | 31 pairs | Kept: these are different jobs submitted together (for example a sweep). |
+| Every field identical (same team, same second) | 13 pairs | Treated as **client retries** of one submission and deduplicated through the idempotency key (row content hash). Two genuinely separate jobs matching on runtime and outcome to the minute is unlikely. Replay prints the count either way and `--keep-duplicates` turns it off. |
+| Same team, same second, different fields | 31 groups | Kept: these are different jobs submitted together (for example a sweep). |
 | `actual_minutes` far above estimate (up to 2,880 vs 240) | some | Kept. The scheduler only sees the estimate, as the brief requires. |
 
 ## 11. Simulation clock
