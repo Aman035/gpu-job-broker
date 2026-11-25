@@ -26,10 +26,11 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..paths import data_dir
 from .glossary import describes_failure, expand
 from .text import LineFilter, redact, tokenize
 
-DEFAULT_LOGS = Path(__file__).resolve().parents[3] / "data" / "01b_failure_logs.jsonl"
+DEFAULT_LOGS = data_dir() / "01b_failure_logs.jsonl"
 
 
 @dataclass

@@ -24,9 +24,10 @@ import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from ..paths import data_dir
 from .index import DEFAULT_LOGS, FailureIndex, SearchOptions
 
-DATA = Path(__file__).resolve().parents[3] / "data"
+DATA = data_dir()
 
 
 @dataclass

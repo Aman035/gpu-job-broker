@@ -18,11 +18,12 @@ from pathlib import Path
 
 from ..config import MINUTE, BrokerConfig
 from ..models import JobStatus
+from ..paths import data_dir
 from ..service import Broker, ValidationError
 from ..store import Store
 from .fake_provider import FakeProvider, ProviderConfig
 
-DEFAULT_TRACE = Path(__file__).resolve().parents[3] / "data" / "01a_trace.csv"
+DEFAULT_TRACE = data_dir() / "01a_trace.csv"
 
 
 @dataclass
