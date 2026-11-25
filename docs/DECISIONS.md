@@ -99,8 +99,9 @@ replay compares the two policies.
 - **Best fit:** put a job on the team's node with the least free GPUs that
   still fits. This keeps other nodes empty so the reaper can stop them.
 - **Booting nodes count as capacity.** A job can be reserved on a node that
-  is still starting, so a burst of 8 jobs launches one 8-GPU node, not eight
-  nodes.
+  is still starting. Jobs arrive one at a time, so while a team already has
+  nodes booting the next node is sized to cover them too: eight 1-GPU jobs
+  in a row launch 1-, 4- and 8-GPU nodes (3 slots), not eight nodes.
 - **Size by demand:** when a launch is needed, pick the smallest node type
   that covers the team's unplaced demand, capped at 8 GPUs. One 1-GPU job
   gets a `gpu-s`; a backlog of six 1-GPU jobs gets a `gpu-l`. Per GPU,
