@@ -1,0 +1,24 @@
+{"qid": "H01", "query": "ran out of VRAM during the forward pass", "expected_ids": ["F001", "F002", "F003", "F004", "F005", "F006", "F910", "F911", "F912"]}
+{"qid": "H02", "query": "process got OOM killed by the kernel", "expected_ids": ["F001", "F002", "F003", "F004", "F005", "F006", "F910", "F911", "F912"]}
+{"qid": "H03", "query": "the run was killed because it used too much RAM loading data", "expected_ids": ["F001", "F002", "F003", "F004", "F005", "F006", "F910", "F911", "F912"]}
+{"qid": "H04", "query": "training became unstable and the loss exploded", "expected_ids": ["F019", "F020", "F021", "F022", "F023", "F024"]}
+{"qid": "H05", "query": "getting NaN values in the loss", "expected_ids": ["F019", "F020", "F021", "F022", "F023", "F024"]}
+{"qid": "H06", "query": "collective operation timed out between GPUs", "expected_ids": ["F025", "F026", "F027", "F028", "F029", "F030"]}
+{"qid": "H07", "query": "workers lost connection to each other during distributed training", "expected_ids": ["F025", "F026", "F027", "F028", "F029", "F030"]}
+{"qid": "H08", "query": "can't fetch the docker image, says unauthorized", "expected_ids": ["F007", "F008", "F009", "F010", "F011", "F012"]}
+{"qid": "H09", "query": "registry login failed when starting the container", "expected_ids": ["F007", "F008", "F009", "F010", "F011", "F012"]}
+{"qid": "H10", "query": "my API credentials are no longer valid", "expected_ids": ["F043", "F044", "F045", "F046", "F047", "F048"]}
+{"qid": "H11", "query": "authentication failed because the session expired", "expected_ids": ["F043", "F044", "F045", "F046", "F047", "F048"]}
+{"qid": "H12", "query": "cuda version incompatible with pytorch", "expected_ids": ["F049", "F050", "F051", "F052", "F053", "F054"]}
+{"qid": "H13", "query": "shared library not found when importing torch", "expected_ids": ["F049", "F050", "F051", "F052", "F053", "F054"]}
+{"qid": "H14", "query": "storage ran out while writing output", "expected_ids": ["F031", "F032", "F033", "F034", "F035", "F036"]}
+{"qid": "H15", "query": "could not write the checkpoint, volume is full", "expected_ids": ["F031", "F032", "F033", "F034", "F035", "F036"]}
+{"qid": "H16", "query": "training files are missing from the data folder", "expected_ids": ["F013", "F014", "F015", "F016", "F017", "F018"]}
+{"qid": "H17", "query": "not allowed to open the labels file", "expected_ids": ["F013", "F014", "F015", "F016", "F017", "F018"]}
+{"qid": "H18", "query": "spot instance was preempted", "expected_ids": ["F037", "F038", "F039", "F040", "F041", "F042"]}
+{"qid": "H19", "query": "machine disappeared and heartbeats stopped", "expected_ids": ["F037", "F038", "F039", "F040", "F041", "F042"]}
+{"qid": "H20", "query": "how much does a large node cost per hour", "expected_ids": []}
+{"qid": "H21", "query": "who do I ask for more GPU quota", "expected_ids": []}
+{"qid": "H22", "query": "how do I change the priority of my job", "expected_ids": []}
+{"qid": "H23", "query": "what is the office wifi password", "expected_ids": []}
+{"qid": "H24", "query": "schedule a meeting with the platform team", "expected_ids": []}
