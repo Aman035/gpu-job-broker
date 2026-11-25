@@ -11,7 +11,10 @@ HOUR = 3600.0
 class BrokerConfig:
     policy: str = "fairshare"  # "fairshare" or "fifo"
     max_nodes: int = 10
-    idle_timeout_s: float = 10 * MINUTE
+    # Optional: once this share of node slots is in use, launch only the
+    # largest node type. Off by default; see docs/RESULTS.md for its cost.
+    slot_pressure_fraction: float | None = None
+    idle_timeout_s: float = 5 * MINUTE
     min_billing_s: float = 10 * MINUTE
     boot_timeout_s: float = 9 * MINUTE  # provider boots within 8 minutes
     fairshare_half_life_s: float = 4 * HOUR

@@ -227,6 +227,30 @@ def test_fifo_makes_light_team_wait_for_whole_burst(make_broker):
     assert late.first_started_at - late.submitted_at > 5 * 60 * MIN
 
 
+def test_busy_team_gives_up_a_slot_without_preemption(make_broker):
+    """vision refills its own nodes; nlp must still get a slot once one vision node empties."""
+    b = make_broker(max_nodes=2, use_interruptible=False)
+    for _ in range(40):
+        b.submit("vision", 8, 60, actual_minutes=60)
+    b.advance(10 * MIN)
+    late, _ = b.submit("nlp", 8, 60, actual_minutes=60)
+    b.run_until_idle()
+    # The soonest-free vision node finishes its current job at ~65 min and is
+    # handed over; without draining, nlp would wait for all 40 vision jobs.
+    assert late.first_started_at - late.submitted_at < 70 * MIN
+    assert all(j.status == JobStatus.SUCCEEDED for j in b.jobs.values())
+
+
+def test_fifo_does_not_drain(make_broker):
+    b = make_broker(policy="fifo", max_nodes=2, use_interruptible=False)
+    for _ in range(40):
+        b.submit("vision", 8, 60, actual_minutes=60)
+    b.advance(10 * MIN)
+    late, _ = b.submit("nlp", 8, 60, actual_minutes=60)
+    b.run_until_idle()
+    assert late.first_started_at - late.submitted_at > 10 * 60 * MIN
+
+
 def test_high_priority_reorders_within_team_only(make_broker):
     b = make_broker(max_nodes=1, use_interruptible=False)
     b.submit("vision", 8, 60, actual_minutes=60)

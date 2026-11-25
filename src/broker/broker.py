@@ -80,9 +80,11 @@ class Broker:
         self._seq: dict[str, int] = self.store.get_kv("seq", {"job": 0, "node": 0})
         self.usage: dict[str, float] = self.store.get_kv("usage", {})
         self._usage_at: float = self.store.get_kv("usage_at", self.now)
+        self.launch_failures: int = self.store.get_kv("launch_failures", 0)
 
         self._open: dict[str, Job] = {j.id: j for j in self.jobs.values() if j.status not in TERMINAL_STATUSES}
         self._backoff: dict[tuple[str, bool], _Backoff] = {}
+        self._rebalancing: set[str] = set()
         self._dirty: set[tuple[str, str]] = set()
 
         self._reconcile()
@@ -321,6 +323,7 @@ class Broker:
                 type_name, self.now, token=node.id, interruptible=interruptible
             )
         except (CapacityUnavailable, QuotaExceeded):
+            self.launch_failures += 1
             del self.nodes[node.id]
             self._dirty.discard(("node", node.id))
             self.store.delete("node", node.id)
@@ -444,6 +447,7 @@ class Broker:
             return
         ordered = self._order(waiting)
         free = self._free_gpus()
+        self._rebalancing = self._nodes_to_drain_for_slots(ordered, free) if self.config.policy == "fairshare" else set()
         blocked: set[tuple[str, bool]] = set()
         for job in ordered:
             if job.node_id is not None:
@@ -497,7 +501,7 @@ class Broker:
         best_key = None
         for node_id, gpus_free in free.items():
             node = self.nodes[node_id]
-            if node.state not in (NodeState.BOOTING, NodeState.READY):
+            if node.state not in (NodeState.BOOTING, NodeState.READY) or node_id in self._rebalancing:
                 continue
             if node.team != job.team or gpus_free < job.gpus:
                 continue
@@ -540,6 +544,9 @@ class Broker:
             if n.team == job.team and n.interruptible == spot and n.state == NodeState.BOOTING
         )
         need = max(job.gpus, min(demand + booting, NODE_TYPES_BY_SIZE[-1].gpus))
+        pressure = self.config.slot_pressure_fraction
+        if pressure is not None and alive >= self.config.max_nodes * pressure:
+            need = NODE_TYPES_BY_SIZE[-1].gpus
         for node_type in NODE_TYPES_BY_SIZE:
             if node_type.gpus < need:
                 continue
@@ -566,6 +573,63 @@ class Broker:
         share = math.ceil(self.config.max_nodes / max(1, len(teams_with_work)))
         team_nodes = sum(1 for n in self.nodes.values() if n.alive and n.team == team)
         return team_nodes >= share
+
+    def _nodes_to_drain_for_slots(self, ordered: list[Job], free: dict[str, int]) -> set[str]:
+        """Pick nodes to stop filling so that a team blocked by the node cap gets a slot.
+
+        Nodes are dedicated to one team, so a slot only frees up when a whole
+        node empties. A busy team keeps refilling its own nodes and would hold
+        every slot for as long as its backlog lasts. For each team that is
+        under its slot share and has nowhere to run, take the over-share team's
+        node expected to free up soonest (by the jobs' estimates) and stop
+        placing new work on it. Nothing running is interrupted.
+
+        Recomputed on every pass from current state, so nothing to persist.
+        """
+        alive = [n for n in self.nodes.values() if n.alive]
+        if len(alive) < self.config.max_nodes:
+            return set()
+        if any(n.state == NodeState.READY and n.idle_since is not None for n in alive):
+            return set()  # an idle node can simply be evicted
+
+        teams_with_work = {j.team for j in self._open.values()}
+        share = math.ceil(self.config.max_nodes / max(1, len(teams_with_work)))
+        node_count: dict[str, int] = {}
+        for n in alive:
+            node_count[n.team] = node_count.get(n.team, 0) + 1
+
+        starved: list[str] = []
+        for job in ordered:
+            team = job.team
+            if team in starved or node_count.get(team, 0) >= share:
+                continue
+            fits_own_node = any(
+                self.nodes[nid].team == team and gpus >= job.gpus for nid, gpus in free.items()
+            )
+            if not fits_own_node:
+                starved.append(team)
+
+        drains: set[str] = set()
+        for _ in starved:
+            donors = [t for t, c in node_count.items() if c > share]
+            if not donors:
+                break
+            donor = max(donors, key=lambda t: (node_count[t], t))
+            candidates = [n for n in alive if n.team == donor and n.state == NodeState.READY and n.id not in drains]
+            if not candidates:
+                break
+            node = min(candidates, key=self._expected_free_at)
+            drains.add(node.id)
+            node_count[donor] -= 1
+        return drains
+
+    def _expected_free_at(self, node: Node) -> tuple[float, str]:
+        ends = [
+            j.started_at + j.estimated_minutes * 60
+            for j in self._open.values()
+            if j.node_id == node.id and j.status == JobStatus.RUNNING
+        ]
+        return (max(ends, default=self.now), node.id)
 
     def _evict_idle_node(self, free: dict[str, int]) -> bool:
         """Under the node cap, an idle node is worth less than a waiting job."""
@@ -616,6 +680,7 @@ class Broker:
         self.store.set_kv("seq", self._seq)
         self.store.set_kv("usage", self.usage)
         self.store.set_kv("usage_at", self._usage_at)
+        self.store.set_kv("launch_failures", self.launch_failures)
         self.store.commit()
 
     def _reconcile(self) -> None:
