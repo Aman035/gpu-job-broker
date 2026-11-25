@@ -26,7 +26,7 @@
 
 ```bash
 make install     # virtualenv and dev tools
-make check       # lint, type check and 75 tests, as CI does (about 10 seconds)
+make check       # lint, type check and 81 tests, as CI does (about 10 seconds)
 make serve       # API on http://127.0.0.1:8000, interactive docs at /docs
 make replay      # regenerate docs/RESULTS.md (about 20 seconds)
 make eval        # regenerate docs/RETRIEVAL_RESULTS.md
@@ -224,7 +224,7 @@ gpu-job-broker/
 │       ├── glossary.py        # everyday words -> logged vocabulary
 │       ├── index.py           # BM25, ranking by shared fix, abstention
 │       └── evaluate.py        # P@k, abstention and ablation
-├── tests/                     # 75 tests: provider, broker, policy, costs, API, replay, retrieval
+├── tests/                     # 81 tests: provider, broker, policy, costs, API, replay, retrieval
 ├── data/
 │   ├── 01a_trace.csv          # one week of submissions
 │   ├── 01b_failure_logs.jsonl # past failures and their fixes
@@ -266,21 +266,32 @@ gpu-job-broker/
 
 ## Use of AI tools
 
-- **Tool:** Claude Code (Anthropic), used as a pair programmer.
-- **What it did:** profiled the trace and failure logs, drafted modules and
-  tests against the design in DECISIONS.md, and ran the replay and retrieval
-  experiments.
-- **What I did:** set the direction and reviewed every change before it was
-  committed. That included:
+- **Tool:** Claude Code (Anthropic), used as a pair programmer throughout.
+- **What it did:** profiled the trace and failure logs, drafted the design
+  notes, modules and tests, and ran the replay and retrieval experiments.
+- **What I did:** set the direction and the quality bar and reviewed the work
+  as it went in. That included:
   - cutting the design notes back to what each decision needs;
   - replacing magic values in tests with readable ones;
-  - requiring each trade-off (node sizing, idle timeout, embeddings) to be
-    settled by a measured comparison rather than intuition.
-- **Reproducible:** those measurements re-run with `make replay` and
+  - requiring each trade-off (node sizing, idle timeout, embeddings,
+    abstention) to be settled by a measured comparison rather than intuition.
+- **Independent review:** I had a separate AI reviewer, given only the brief
+  and the repo, critique the submission. It found two real problems, both
+  fixed and documented:
+  - an eviction bug that quietly killed jobs a node had just received;
+  - an evaluation claim ("held-out, never tuned on") that the repo did not
+    support. It was replaced by a blind test set written by another agent that
+    never saw the code.
+- **Reproducible:** every measurement re-runs with `make replay` and
   `make eval`.
 
 ## Time
 
-- **When:** one sitting on 2026-11-25.
-- **Span:** first commit 19:53 IST, finished 21:00 IST.
-- **Total:** about 1.5 hours, including design and review.
+- **When:** one evening, 2026-11-25.
+- **Before the first commit:** reading the brief, vetting the files and
+  planning (the first commit is 19:53 IST).
+- **Build:** 19:53 to 21:00 IST.
+- **Review and fixes:** 21:00 to 22:40 IST, after the independent review.
+- **Total:** about 3 hours, including time with AI tools.
+- **Commits that share a timestamp** were made together after I had reviewed
+  them as a pair; they are separate steps, not a squash.
