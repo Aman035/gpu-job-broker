@@ -167,7 +167,7 @@ both numbers so the choice can be revisited with data.
 
 The default comes from the replay sweep (docs/RESULTS.md):
 
-- 10, 20 and 30 minutes cost 3 to 11% more than 5 and make waits longer, not
+- 10, 20 and 30 minutes cost 4 to 11% more than 5 and make waits longer, not
   shorter: arrivals are bursty with long gaps, so a warm node is rarely reused
   in time, and under the node cap an idle node holds a slot another team needs.
 - 0 minutes (reap as soon as the paid 10-minute minimum is used) is about 3%
@@ -220,9 +220,10 @@ sequenceDiagram
 | Issue | Rows | Decision |
 |---|---|---|
 | Rows not sorted by time | many | Sort by `submitted_at`; ties keep file order. |
+| Timestamps with an offset (`+01:00`, `-07:00`) instead of `Z` | 15 | Parsed as written and normalised to UTC before sorting and deduplication. |
 | `gpus = 3` | 1 | **Rejected**, as the API would reject it (the brief allows 1, 2, 4, 8). Silently rounding up to 4 would bill the team for a GPU it did not ask for. |
 | `gpus = 16` | 1 | **Rejected**: it cannot fit on any node. |
-| Every field identical (same team, same second) | 13 pairs | Treated as **client retries** of one submission and deduplicated through the idempotency key (row content hash). Two genuinely separate jobs matching on runtime and outcome to the minute is unlikely. Replay prints the count either way and `--keep-duplicates` turns it off. |
+| Same submission twice (every field equal once the time is normalised to UTC) | 14 pairs, one written in two time zones (lines 351 and 352) | Treated as **client retries** of one submission and deduplicated through the idempotency key (hash of the parsed row, so `18:01Z` and `19:01+01:00` match). Two genuinely separate jobs matching on runtime and outcome to the minute is unlikely. Replay prints the count either way and `--keep-duplicates` turns it off. |
 | Same team, same second, different fields | 31 groups | Kept: these are different jobs submitted together (for example a sweep). |
 | `actual_minutes` far above estimate (up to 2,880 vs 240) | some | Kept. The scheduler only sees the estimate, as the brief requires. |
 

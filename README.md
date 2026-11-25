@@ -150,7 +150,7 @@ stateDiagram-v2
     for 12% more cost.
   - It is a setting, off by default: the team causing the burst should make
     that trade with Finance (DECISIONS.md, section 5).
-- **A longer idle timeout buys nothing.** 10 to 30 minutes cost 3 to 11% more
+- **A longer idle timeout buys nothing.** 10 to 30 minutes cost 4 to 11% more
   than 5 and make waits longer. 0 minutes is about 3% cheaper still; 5 is kept
   as a margin for quick resubmits (DECISIONS.md, section 8).
 - **Interruptible nodes for `low` jobs cut about 7%** of the bill, and waits

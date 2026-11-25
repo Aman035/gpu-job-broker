@@ -35,12 +35,21 @@ class TraceRow:
     actual_minutes: int
     priority: str
     outcome: str
-    raw: tuple
 
     @property
     def key(self) -> str:
-        """Content hash used as the idempotency key: identical rows are one submission."""
-        return hashlib.sha256("|".join(self.raw).encode()).hexdigest()[:16]
+        """Idempotency key: a hash of the parsed row, so the same submission written
+        in two time zones (18:01Z and 19:01+01:00) is still recognised as one."""
+        fields = (
+            f"{self.submitted_at:.0f}",
+            self.team,
+            str(self.gpus),
+            str(self.estimated_minutes),
+            str(self.actual_minutes),
+            self.priority,
+            self.outcome,
+        )
+        return hashlib.sha256("|".join(fields).encode()).hexdigest()[:16]
 
 
 @dataclass
@@ -66,7 +75,6 @@ def load_trace(path: Path, keep_duplicates: bool = False) -> TraceLoad:
                 actual_minutes=int(r["actual_minutes"]),
                 priority=r["priority"],
                 outcome=r["outcome"],
-                raw=tuple(r.values()),
             )
         )
     rows.sort(key=lambda r: (r.submitted_at, r.line))  # the file is not in time order
@@ -249,7 +257,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Replay the trace and compare scheduling policies")
     parser.add_argument("--trace", type=Path, default=DEFAULT_TRACE)
     parser.add_argument("--seeds", type=int, default=5, help="provider seeds to average over (1..N)")
-    parser.add_argument("--keep-duplicates", action="store_true", help="do not collapse identical rows")
+    parser.add_argument("--keep-duplicates", action="store_true", help="do not collapse duplicate submissions")
     parser.add_argument("--quick", action="store_true", help="skip the sensitivity runs")
     parser.add_argument("--out", type=Path, help="also write the report to this Markdown file")
     parser.add_argument(
@@ -267,7 +275,7 @@ def main(argv: list[str] | None = None) -> None:
     out = [
         "# Trace replay",
         "",
-        f"`{args.trace.name}`: {len(trace.rows) + trace.duplicates} rows, {trace.duplicates} identical rows "
+        f"`{args.trace.name}`: {len(trace.rows) + trace.duplicates} rows, {trace.duplicates} duplicate submissions "
         f"collapsed as client retries, {len(rejected)} rejected, "
         f"{len(trace.rows) - len(rejected)} jobs replayed. Every figure is a mean over provider "
         f"seeds {seeds[0]}-{seeds[-1]}.",
