@@ -26,7 +26,7 @@
 
 ```bash
 make install     # virtualenv and dev tools
-make check       # lint, type check and 81 tests, as CI does (about 10 seconds)
+make check       # lint, type check and 84 tests, as CI does (about 10 seconds)
 make serve       # API on http://127.0.0.1:8000, interactive docs at /docs
 make replay      # regenerate docs/RESULTS.md (about 20 seconds)
 make eval        # regenerate docs/RETRIEVAL_RESULTS.md
@@ -224,7 +224,7 @@ gpu-job-broker/
 │       ├── glossary.py        # everyday words -> logged vocabulary
 │       ├── index.py           # BM25, ranking by shared fix, abstention
 │       └── evaluate.py        # P@k, abstention and ablation
-├── tests/                     # 81 tests: provider, broker, policy, costs, API, replay, retrieval
+├── tests/                     # 84 tests: provider, broker, policy, costs, API, replay, retrieval
 ├── data/
 │   ├── 01a_trace.csv          # one week of submissions
 │   ├── 01b_failure_logs.jsonl # past failures and their fixes
