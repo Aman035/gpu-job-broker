@@ -130,7 +130,9 @@ re-run from it.
   - a how-to question that shares a phrase with a log ("generate a personal
     **access token**") passes the literal-match check;
   - one word can mean two things ("early **stopping**" vs "heartbeats
-    stopped").
+    stopped");
+  - any number from 100 to 599 counts as a status code, so "can I submit 200
+    jobs at once" is treated as a failure report.
   Next step: replace the word lists with a small classifier for "is this a
   failure report?", trained on real support questions, and revisit embeddings
   once there is enough data to show they help.

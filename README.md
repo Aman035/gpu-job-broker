@@ -255,6 +255,11 @@ gpu-job-broker/
   failures (DECISIONS.md, section 3).
 - **No budgets or hard quotas yet.** Fair share and visible idle cost come
   first; budgets need a policy agreed with Finance.
+- **Jobs that never report completion.** A job submitted through the API runs
+  until a client calls `complete`, so a forgotten job keeps its node billing.
+  Next step: a heartbeat lease that fails the job when the client goes quiet.
+  A hard limit on runtime would be wrong here: real jobs in the trace run up to
+  12 times their estimate.
 - **Identity.** `team` is taken from the request. In production it must come
   from the caller's credentials, or one team could bill another.
 - **Warm pool.** On this trace a longer idle timeout does not help; a pool
@@ -291,7 +296,7 @@ gpu-job-broker/
 - **Before the first commit:** reading the brief, vetting the files and
   planning (the first commit is 19:53 IST).
 - **Build:** 19:53 to 21:00 IST.
-- **Review and fixes:** 21:00 to 22:40 IST, after the independent review.
+- **Review and fixes:** 21:00 to 22:31 IST, after two independent reviews.
 - **Total:** about 3 hours, including time with AI tools.
 - **Commits that share a timestamp** were made together after I had reviewed
   them as a pair; they are separate steps, not a squash.

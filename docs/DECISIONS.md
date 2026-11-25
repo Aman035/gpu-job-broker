@@ -114,7 +114,7 @@ burst. The replay compares the two policies.
   backlog onto one node costs almost nothing extra and saves node slots,
   which are the real constraint under the 10-node cap.
 - **Not done by default: large nodes under slot pressure.** In the replay,
-  `vision`'s burst trickles in at about one job a minute and fills the 10
+  `vision`'s burst arrives at about three jobs a minute and fills the 10
   slots with small nodes (about 55 of 80 possible GPUs). Launching only
   `gpu-l` once 8 of 10 slots are used cuts p90 wait from 103 to 75 minutes but
   raises the weekly bill by 12% and idle share to 34% (docs/RESULTS.md). The wait falls on
