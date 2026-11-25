@@ -124,32 +124,39 @@ stateDiagram-v2
 ## Results: trace replay
 
 - Every figure is a mean over 5 provider seeds; one seed alone can move the
-  p90 wait by up to 40 minutes.
+  p90 wait by tens of minutes.
 - Full tables: [docs/RESULTS.md](docs/RESULTS.md).
 
 **Findings**
 
 - **Fair share protects the teams that are not flooding the queue.**
-  - On 2025-03-05 `vision` submits 167 jobs in under 3 hours.
-  - `platform`'s p90 wait: 59 minutes under FIFO, 13 under fair share.
-  - `vision` absorbs the cost of its own burst (p90 87 → 100 minutes).
+  - On 2025-03-05 `vision` submits 163 jobs in 54 minutes.
+  - `platform`'s p90 wait: 63 minutes under FIFO, 13 under fair share; its p99
+    drops from 99 to 31.
+  - `vision` absorbs the cost of its own burst (p90 95 → 119 minutes).
+  - The trade-off: `vision` is over half of all jobs, so the *overall* p90
+    rises from 85 to 103 minutes. That is the intended effect, the flood waits
+    instead of everyone else, but it is a real cost to that team.
   - The total bill is unchanged within noise.
 - **Most jobs start in about the boot time.**
   - Median wait: 7 minutes.
-  - 65% of jobs start within the 10 minutes ML engineers asked for.
-  - Every team except `vision` has a p90 of 8 to 15 minutes.
-- **Idle share is 26%** of the bill, against the roughly one third Finance
+  - 64% of jobs start within the 10 minutes ML engineers asked for.
+  - Every team except `vision` has a p90 of 8 to 14 minutes.
+- **Idle share is 25%** of the bill, against the roughly one third Finance
   reported, and it is visible per team.
 - **The burst is limited by node slots, not GPUs.**
   - Jobs trickle in and fill the 10 slots with small nodes.
-  - Launching only large nodes near the cap cuts p90 from 86 to 71 minutes,
-    for 11% more cost.
+  - Launching only large nodes near the cap cuts p90 from 103 to 75 minutes,
+    for 12% more cost.
   - It is a setting, off by default: the team causing the burst should make
     that trade with Finance (DECISIONS.md, section 5).
-- **A longer idle timeout buys nothing.** 20 to 30 minutes adds about 10% to
-  the bill with no shorter waits, so the default is 5 minutes.
-- **Interruptible nodes for `low` jobs cut about 7%** of the bill, with no
-  measurable effect on waits.
+- **A longer idle timeout buys nothing.** 10 to 30 minutes cost 3 to 11% more
+  than 5 and make waits longer. 0 minutes is about 3% cheaper still; 5 is kept
+  as a margin for quick resubmits (DECISIONS.md, section 8).
+- **Interruptible nodes for `low` jobs cut about 7%** of the bill, and waits
+  are no longer for it.
+- **Lost runs are all interruptible reclaims.** Regular nodes are never taken
+  from a running job.
 
 ## Results: failure retrieval
 

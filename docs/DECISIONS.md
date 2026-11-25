@@ -95,9 +95,9 @@ exponentially decayed sum with a 4-hour half-life.
   expected to free up soonest stops receiving new jobs; once its running jobs
   finish, the slot goes to the waiting team.
 
-The trace is a real test of this: on 2025-03-05 `vision` submits about 187
-jobs within an hour. Under FIFO everyone else waits behind that burst. The
-replay compares the two policies.
+The trace is a real test of this: on 2025-03-05 `vision` submits 163 jobs in
+54 minutes (06:04 to 06:58 UTC). Under FIFO everyone else waits behind that
+burst. The replay compares the two policies.
 
 ## 5. Placement and node sizing
 
@@ -116,8 +116,8 @@ replay compares the two policies.
 - **Not done by default: large nodes under slot pressure.** In the replay,
   `vision`'s burst trickles in at about one job a minute and fills the 10
   slots with small nodes (about 55 of 80 possible GPUs). Launching only
-  `gpu-l` once 8 of 10 slots are used cuts p90 wait from 86 to 71 minutes but
-  raises the weekly bill by 11% and idle share to 34% (docs/RESULTS.md). The wait falls on
+  `gpu-l` once 8 of 10 slots are used cuts p90 wait from 103 to 75 minutes but
+  raises the weekly bill by 12% and idle share to 34% (docs/RESULTS.md). The wait falls on
   the team causing the burst while fair share protects everyone else, so I
   leave it as an opt-in setting (`slot_pressure_fraction`) for that team and
   Finance to decide on, rather than a default everyone pays for.
@@ -165,12 +165,17 @@ both numbers so the choice can be revisited with data.
 - Draining interruptible nodes and nodes still booting are not reaped (the
   boot timeout handles stuck nodes).
 
-The default comes from the replay sweep (docs/RESULTS.md): 20 and 30 minutes
-add about 10% cost and do not shorten waits, because arrivals are bursty with
-long gaps and a warm node is rarely reused in time. 5 and 10 minutes cost the
-same within seed noise and 5 has the better waits. 0 is about 4% cheaper but
-is the most fragile: a job arriving a minute after a reap pays a full cold
-start.
+The default comes from the replay sweep (docs/RESULTS.md):
+
+- 10, 20 and 30 minutes cost 3 to 11% more than 5 and make waits longer, not
+  shorter: arrivals are bursty with long gaps, so a warm node is rarely reused
+  in time, and under the node cap an idle node holds a slot another team needs.
+- 0 minutes (reap as soon as the paid 10-minute minimum is used) is about 3%
+  cheaper than 5 on this trace, with waits the same within seed noise.
+- I keep 5 minutes as a margin for a pattern one week of synthetic data does
+  not contain: users resubmitting a failed job within minutes, which would pay
+  a full cold start at 0. With more real traffic, 0 is the first thing I would
+  test.
 
 ## 9. Restart safety
 

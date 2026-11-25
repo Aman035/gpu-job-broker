@@ -507,7 +507,11 @@ class Broker:
     def _place(self, job: Job, node: Node, free: dict[str, int]) -> None:
         free[node.id] -= job.gpus
         job.node_id = node.id
+        # The node is busy from now on. Clearing this here, not at the end of the
+        # pass, stops a later step in the same pass evicting it as idle.
+        node.idle_since = None
         self._touch(job)
+        self._touch(node)
         if node.state == NodeState.READY:
             self._start(job, node)
 

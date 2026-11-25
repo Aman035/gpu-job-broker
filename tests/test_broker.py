@@ -320,3 +320,15 @@ def test_crash_between_launch_and_record_is_reconciled(tmp_path):
     assert b2.provider.describe(orphan, b2.now).status == "terminated"
     b2.run_until_idle()
     assert all(j.status == JobStatus.SUCCEEDED for j in b2.jobs.values())
+
+
+def test_node_that_just_received_a_job_is_not_evicted_as_idle(make_broker):
+    """Regression: a node placed on earlier in the same pass still looked idle and was evicted."""
+    b = make_broker(policy="fifo", max_nodes=1, use_interruptible=False)
+    b.submit("vision", 8, 60, actual_minutes=60)
+    b.advance(10 * MIN)
+    waiting, _ = b.submit("vision", 8, 60, actual_minutes=60)  # will reuse vision's node
+    b.submit("nlp", 8, 60, actual_minutes=60)  # blocked by the cap in the same pass
+    b.run_until_idle()
+    assert not [r for r in b.runs.values() if r.outcome == "lost"]
+    assert b.runs[f"{waiting.id}#1"].outcome == "succeeded"
