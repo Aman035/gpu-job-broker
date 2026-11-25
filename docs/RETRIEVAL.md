@@ -34,6 +34,17 @@ Full per-question results: [RETRIEVAL_RESULTS.md](RETRIEVAL_RESULTS.md)
 Abstention: 6 of 6 given and 5 of 5 held-out unanswerable questions return
 nothing, and no answerable question is wrongly refused.
 
+```mermaid
+flowchart LR
+    q["question or pasted log"] --> red["redact secrets"] --> sig["keep signal lines"] --> tok["tokenise"]
+    tok --> hit{"glossary<br/>concept hit?"}
+    hit -->|yes| exp["add glossary terms"] --> bm["BM25 over signal lines and fix text"]
+    hit -->|no| strong{"strong literal<br/>match?"}
+    strong -->|no| none["no match"]
+    strong -->|yes| bm
+    bm --> boost["boost logs that share a fix"] --> out["top k, suggested fix, ambiguity flag"]
+```
+
 1. **Redact first.** Secrets are masked before indexing, so they can never be
    returned or leak into an index.
 2. **Signal lines, learned from the corpus.** A line whose template (digits

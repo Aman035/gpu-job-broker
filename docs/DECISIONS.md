@@ -189,6 +189,24 @@ start.
     gone, and its jobs return to the queue.
 - **Simulated time resumes where it stopped.** Events that fell due while
   the broker was down are processed in order on the next clock advance.
+- **Launch and recovery, end to end:**
+
+```mermaid
+sequenceDiagram
+    participant B as Broker
+    participant DB as broker.db
+    participant P as Provider
+    B->>DB: save node as launching, with token, and commit
+    B->>P: launch_node(type, token)
+    P-->>B: provider node id
+    B->>DB: mark node booting
+    Note over B,P: a crash anywhere above leaves at most a saved intent
+    B->>P: on restart, list_nodes()
+    P-->>B: live nodes and their tokens
+    B->>DB: adopt intents the provider has, drop the ones it never saw
+    B->>P: terminate live nodes with unknown tokens
+```
+
 - **No in-memory timers.** The next event time is always computed from
   persisted timestamps, so there is no timer heap to lose.
 
