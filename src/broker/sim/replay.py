@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import logging
 import statistics
 import sys
 from dataclasses import dataclass, field
@@ -251,7 +252,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--keep-duplicates", action="store_true", help="do not collapse identical rows")
     parser.add_argument("--quick", action="store_true", help="skip the sensitivity runs")
     parser.add_argument("--out", type=Path, help="also write the report to this Markdown file")
+    parser.add_argument(
+        "--log-level", default="ERROR", help="broker log level; a simulated week logs hundreds of launch failures"
+    )
     args = parser.parse_args(argv)
+    logging.basicConfig(level=args.log_level, format="%(levelname)s %(name)s: %(message)s")
 
     trace = load_trace(args.trace, keep_duplicates=args.keep_duplicates)
     seeds = list(range(1, args.seeds + 1))
