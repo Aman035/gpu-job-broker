@@ -1,11 +1,11 @@
-# Job Broker
+# GPU Job Broker
 
-A shared service that schedules ML teams' GPU jobs onto rented cloud nodes,
-starts and stops those nodes to keep the bill under control, and attributes
-every dollar, idle time included, to the team that caused it. A second
-component searches past job failures for the most similar cases and their fixes.
-
-The reasoning behind each design choice is in [docs/DECISIONS.md](docs/DECISIONS.md).
+- A shared service that schedules ML teams' GPU jobs onto rented cloud nodes.
+- Starts and stops nodes to keep the bill down, and attributes every dollar,
+  idle time included, to the team that caused it.
+- Includes a search over past job failures that returns the most similar
+  cases and their fixes.
+- Reasoning behind every design choice: [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## Requirements at a glance
 
@@ -32,13 +32,13 @@ make replay      # regenerate docs/RESULTS.md (about 20 seconds)
 make eval        # regenerate docs/RETRIEVAL_RESULTS.md
 ```
 
-Without `make`: `pip install -e ".[dev]"`, then `pytest`, `broker-serve`,
-`broker-replay` and `broker-eval-retrieval`.
-
-State lives in `var/broker.db` and `var/provider.db`. Kill the server, start it
-again with the same `--data-dir`, and every job, node and cost record is still
-there. Simulated time resumes where it stopped, and provider nodes keep billing
-in between, as they would in a real cloud.
+- **Without `make`:** `pip install -e ".[dev]"`, then `pytest`, `broker-serve`,
+  `broker-replay` and `broker-eval-retrieval`.
+- **State:** `var/broker.db` and `var/provider.db`.
+- **Restarts lose nothing:** stop the server, start it with the same
+  `--data-dir`, and every job, node and cost record is still there.
+- **Time:** simulated time resumes where it stopped, and provider nodes keep
+  billing in between, as they would in a real cloud.
 
 ## Architecture
 
@@ -56,33 +56,21 @@ flowchart LR
     ret --> logs[("failure logs")]
 ```
 
-The broker owns state and side effects; `policy.py` makes the decisions as
-pure functions. The provider sits behind an interface and keeps its own
-store, as a real cloud would, so it keeps billing while the broker is down.
-Time moves only by jumping to the next due event, so a simulated week
-replays in seconds.
-
-## Approach in brief
-
-- **Isolation is a hard rule.** A node belongs to one team for its whole life,
-  because data outlives the job that wrote it. This also makes cost
-  attribution exact.
-- **Every cost has an owner.** Each team's bill is split into *used* and
-  *idle*, so Finance's question "who is accountable?" has an answer per team.
-- **Fairness without gaming.** The next free slot goes to the team with the
-  least recent GPU usage. Priority only reorders a team's own queue, so marking
-  everything `high` buys nothing against other teams.
-- **Failures are expected.** Capacity errors back off per node type and fall
-  back to a larger type. Stuck boots are abandoned at 9 minutes. Launches are
-  idempotent, so a crash mid-launch cannot leak a billing node.
-- **Simple enough to run with a small team.** No pre-emption, no in-memory
-  timers, and every number in the docs is reproducible with one command.
+- **Broker** (`service.py`) owns state and side effects.
+- **Policy** (`policy.py`) makes the decisions as pure functions.
+- **Provider** sits behind an interface with its own store, so it keeps
+  billing while the broker is down.
+- **Clock** jumps straight to the next due event, so a simulated week replays
+  in seconds.
 
 ## Lifecycles
 
-**Jobs.** A job reserved on a node that is still booting stays `queued` until
-the node is ready. If its node disappears mid-run, the run is recorded as lost
-(and billed), and the job goes back to the queue.
+**Jobs**
+
+- A job reserved on a node that is still booting stays `queued` until the node
+  is ready.
+- If its node disappears mid-run, the run is recorded as lost (and billed) and
+  the job returns to the queue.
 
 ```mermaid
 stateDiagram-v2
@@ -98,8 +86,10 @@ stateDiagram-v2
     cancelled --> [*]
 ```
 
-**Nodes.** The launch intent is saved before the provider is called, which is
-what makes a crash mid-launch recoverable (DECISIONS.md, section 9).
+**Nodes**
+
+- The launch intent is saved before the provider is called.
+- That is what makes a crash mid-launch recoverable (DECISIONS.md, section 9).
 
 ```mermaid
 stateDiagram-v2
@@ -114,55 +104,77 @@ stateDiagram-v2
     terminated --> [*]
 ```
 
+## Approach in brief
+
+- **Isolation is a hard rule.** A node belongs to one team for its whole life,
+  because data outlives the job that wrote it. This also makes cost
+  attribution exact.
+- **Every cost has an owner.** Each team's bill is split into *used* and
+  *idle*, so Finance's "who is accountable?" has an answer per team.
+- **Fairness that cannot be gamed.** The next free slot goes to the team with
+  the least recent GPU usage. Priority only reorders a team's own queue, so
+  marking everything `high` buys nothing against other teams.
+- **Failures are expected.**
+  - Capacity errors back off per node type and fall back to a larger type.
+  - Stuck boots are abandoned at 9 minutes.
+  - Launches are idempotent, so a crash mid-launch cannot leak a billing node.
+- **Simple enough for a small team to run.** No pre-emption, no in-memory
+  timers, and every number in the docs comes from one command.
+
 ## Results: trace replay
 
-Each figure is a mean over 5 provider seeds; a single seed moves the p90 wait
-by up to 40 minutes. Full tables: [docs/RESULTS.md](docs/RESULTS.md).
+- Every figure is a mean over 5 provider seeds; one seed alone can move the
+  p90 wait by up to 40 minutes.
+- Full tables: [docs/RESULTS.md](docs/RESULTS.md).
 
-- **Fair share protects the teams that are not flooding the queue.** On
-  2025-03-05 `vision` submits 167 jobs in under 3 hours. Under FIFO,
-  `platform`'s p90 wait is 59 minutes; under fair share it is 13. `vision`
-  absorbs the cost of its own burst (p90 87 → 100 minutes), and the total bill
-  is unchanged within noise.
-- **Most jobs start in roughly the boot time.** The median wait is 7 minutes
-  and 65% of jobs start within the 10 minutes ML engineers asked for. Every
-  team except `vision` has a p90 of 8 to 15 minutes.
+**Findings**
+
+- **Fair share protects the teams that are not flooding the queue.**
+  - On 2025-03-05 `vision` submits 167 jobs in under 3 hours.
+  - `platform`'s p90 wait: 59 minutes under FIFO, 13 under fair share.
+  - `vision` absorbs the cost of its own burst (p90 87 → 100 minutes).
+  - The total bill is unchanged within noise.
+- **Most jobs start in about the boot time.**
+  - Median wait: 7 minutes.
+  - 65% of jobs start within the 10 minutes ML engineers asked for.
+  - Every team except `vision` has a p90 of 8 to 15 minutes.
 - **Idle share is 26%** of the bill, against the roughly one third Finance
   reported, and it is visible per team.
-- **The burst is limited by node slots, not GPUs.** Jobs trickle in and fill
-  the 10 slots with small nodes. Launching only large nodes near the cap cuts
-  the p90 from 86 to 71 minutes for 11% more cost. It is a setting, off by
-  default, because the team causing the burst should make that trade with
-  Finance (DECISIONS.md, section 5).
-- **A longer idle timeout buys nothing.** 20 to 30 minutes adds about 10% to the
-  bill with no shorter waits, so the default is 5 minutes.
-- **Interruptible nodes for `low` jobs cut about 7%** of the bill with no
+- **The burst is limited by node slots, not GPUs.**
+  - Jobs trickle in and fill the 10 slots with small nodes.
+  - Launching only large nodes near the cap cuts p90 from 86 to 71 minutes,
+    for 11% more cost.
+  - It is a setting, off by default: the team causing the burst should make
+    that trade with Finance (DECISIONS.md, section 5).
+- **A longer idle timeout buys nothing.** 20 to 30 minutes adds about 10% to
+  the bill with no shorter waits, so the default is 5 minutes.
+- **Interruptible nodes for `low` jobs cut about 7%** of the bill, with no
   measurable effect on waits.
 
 ## Results: failure retrieval
 
-`POST /failures/search` accepts a question or a pasted log and returns similar
-past failures, their fixes, a suggested fix, and an explicit "no match" when
-nothing relevant exists.
+- `POST /failures/search` takes a question or a pasted log.
+- It returns similar past failures, their fixes and a suggested fix, or an
+  explicit "no match" when nothing relevant exists.
 
 | Test set | P@3 | P@5 | Unanswerable questions correctly refused |
 |---|---|---|---|
 | 24 given questions | 1.00 | 0.99 | 6 of 6 |
 | 24 held-out paraphrases, written before the pipeline and never tuned on | 0.97 | 0.97 | 5 of 5 |
 
-The pipeline is lexical: secret redaction, a boilerplate filter learned from
-the corpus, error-aware tokens, a small glossary, BM25, and ranking by shared
-fix. An embedding model was measured and left out because it added nothing on
-this data. The ablation and the known limits are in
-[docs/RETRIEVAL.md](docs/RETRIEVAL.md).
+- **Pipeline:** secret redaction → boilerplate filter learned from the corpus
+  → error-aware tokens → small glossary → BM25 → ranking by shared fix.
+- **Embeddings** were measured and left out: they added nothing on this data.
+- Ablation and known limits: [docs/RETRIEVAL.md](docs/RETRIEVAL.md).
 
 ## HTTP API
 
-Times are ISO 8601 UTC. Simulated time moves only through `POST /clock/advance`.
+- Times are ISO 8601 UTC.
+- Simulated time moves only through `POST /clock/advance`.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/jobs` | Submit `{team, gpus, estimated_minutes, priority}`. With an `Idempotency-Key` header, a repeat returns the original job (`200`) and a different body under the same key is rejected (`409`). New jobs return `201`. |
+| `POST` | `/jobs` | Submit `{team, gpus, estimated_minutes, priority}`. New jobs return `201`. With an `Idempotency-Key` header, a repeat returns the original job (`200`) and a different body under the same key is rejected (`409`). |
 | `GET` | `/jobs/{id}` | One job. |
 | `GET` | `/jobs?status=&team=` | Jobs, newest first. |
 | `POST` | `/jobs/{id}/cancel` | Cancel a queued or running job. Repeating it is harmless; cancelling a finished job is `409`. |
@@ -175,46 +187,64 @@ Times are ISO 8601 UTC. Simulated time moves only through `POST /clock/advance`.
 | `POST` | `/failures/search` | `{query, k}`: similar past failures with fixes, a suggested fix and an abstain flag. |
 | `GET` | `/healthz` | Liveness, plus queue depth, live nodes and launch failures. |
 
-Errors: `422` invalid input, `404` unknown job, `409` invalid state change or
-idempotency conflict.
+- **Errors:** `422` invalid input, `404` unknown job, `409` invalid state
+  change or idempotency conflict.
 
 ## Code layout
 
 ```
-src/broker/
-  models.py  config.py  store.py    domain types, settings, SQLite persistence
-  cloud.py                          CloudProvider interface the broker depends on
-  policy.py                         scheduling decisions as pure functions
-  service.py                        Broker: job and node lifecycle, event loop, recovery
-  costs.py                          GPU-hours and cost per team, used vs idle
-  api.py                            HTTP API
-  sim/        fake_provider.py      simulated cloud implementing CloudProvider
-              replay.py             trace replay and policy comparison
-  retrieval/  text.py               redaction, signal lines, tokenisation
-              glossary.py           everyday words -> logged vocabulary
-              index.py              BM25, ranking by shared fix, abstention
-              evaluate.py           P@k, abstention and ablation
-docs/         DECISIONS.md  RESULTS.md  RETRIEVAL.md  RETRIEVAL_RESULTS.md
+gpu-job-broker/
+├── src/broker/
+│   ├── models.py              # domain types: Job, Node, Run, node prices
+│   ├── config.py              # every policy setting in one place
+│   ├── store.py               # SQLite document store (WAL)
+│   ├── cloud.py               # CloudProvider interface and provider errors
+│   ├── policy.py              # scheduling decisions as pure functions
+│   ├── service.py             # Broker: job and node lifecycle, event loop, recovery
+│   ├── costs.py               # GPU-hours and cost per team, used vs idle
+│   ├── api.py                 # HTTP API (FastAPI)
+│   ├── sim/
+│   │   ├── fake_provider.py   # simulated cloud implementing CloudProvider
+│   │   └── replay.py          # trace replay and policy comparison
+│   └── retrieval/
+│       ├── text.py            # redaction, signal lines, tokenisation
+│       ├── glossary.py        # everyday words -> logged vocabulary
+│       ├── index.py           # BM25, ranking by shared fix, abstention
+│       └── evaluate.py        # P@k, abstention and ablation
+├── tests/                     # 75 tests: provider, broker, policy, costs, API, replay, retrieval
+├── data/
+│   ├── 01a_trace.csv          # one week of submissions
+│   ├── 01b_failure_logs.jsonl # past failures and their fixes
+│   ├── 01c_retrieval_queries.jsonl
+│   └── holdout_queries.jsonl  # held-out paraphrases, never tuned on
+├── docs/
+│   ├── DECISIONS.md           # design decisions and trade-offs
+│   ├── RESULTS.md             # generated by `make replay`
+│   ├── RETRIEVAL.md           # retrieval design, ablation, limits
+│   └── RETRIEVAL_RESULTS.md   # generated by `make eval`
+├── .github/workflows/ci.yml   # lint, types, tests, replay, eval on Python 3.10 and 3.12
+├── Dockerfile                 # non-root image, health check, state volume
+├── Makefile
+└── pyproject.toml
 ```
 
-Policy and mechanism are kept apart: changing *who runs next* or *how big a
-node to launch* is an edit to `policy.py`, testable without the event loop. A
-real cloud plugs in by implementing `cloud.CloudProvider`; the broker never
-imports the simulator. CI runs lint, type checks, tests, the replay and the
-retrieval evaluation on Python 3.10 and 3.12, and `make docker` builds a
-non-root image with a health check and a state volume.
+- **Policy and mechanism are kept apart.** Changing *who runs next* or *how
+  big a node to launch* is an edit to `policy.py`, testable without the event
+  loop.
+- **The simulator is swappable.** A real cloud plugs in by implementing
+  `cloud.CloudProvider`; the broker never imports the simulator.
 
 ## Trade-offs and next steps
 
 - **No pre-emption.** It would shorten burst waits further, but killing jobs
-  without a checkpoint contract wastes paid GPU time and produces surprising
+  without a checkpoint contract wastes paid GPU time and causes surprising
   failures (DECISIONS.md, section 3).
 - **No budgets or hard quotas yet.** Fair share and visible idle cost come
   first; budgets need a policy agreed with Finance.
 - **Identity.** `team` is taken from the request. In production it must come
   from the caller's credentials, or one team could bill another.
-- **Warm pool.** On this trace a longer idle timeout does not help; a pool sized
-  from arrival history might, given more than one week of data to tune on.
+- **Warm pool.** On this trace a longer idle timeout does not help; a pool
+  sized from arrival history might, given more than one week of data.
 - **Metrics and alerts** on queue depth, launch failure rate and idle share, so
   the platform team hears about problems before users do.
 - **Retrieval:** grow the glossary from incident tickets, and cluster fixes
@@ -222,17 +252,21 @@ non-root image with a health check and a state volume.
 
 ## Use of AI tools
 
-I worked with Claude Code (Anthropic) as a pair programmer. It handled the
-mechanical parts: profiling the trace and the failure logs, drafting modules
-and tests against the design in DECISIONS.md, and running the replay and
-retrieval experiments. I owned the direction and reviewed every change before
-it was committed. In practice that meant cutting the design notes back to what
-each decision needs, replacing magic values in tests with readable ones, and
-insisting that each trade-off (node sizing, idle timeout, embeddings) be
-settled by a measured comparison rather than by intuition. Those measurements
-are reproducible with `make replay` and `make eval`.
+- **Tool:** Claude Code (Anthropic), used as a pair programmer.
+- **What it did:** profiled the trace and failure logs, drafted modules and
+  tests against the design in DECISIONS.md, and ran the replay and retrieval
+  experiments.
+- **What I did:** set the direction and reviewed every change before it was
+  committed. That included:
+  - cutting the design notes back to what each decision needs;
+  - replacing magic values in tests with readable ones;
+  - requiring each trade-off (node sizing, idle timeout, embeddings) to be
+    settled by a measured comparison rather than intuition.
+- **Reproducible:** those measurements re-run with `make replay` and
+  `make eval`.
 
 ## Time
 
-One sitting on 2026-11-25, about 1.5 hours including design and review (first
-commit 19:53 IST, finished 21:00 IST).
+- **When:** one sitting on 2026-11-25.
+- **Span:** first commit 19:53 IST, finished 21:00 IST.
+- **Total:** about 1.5 hours, including design and review.
