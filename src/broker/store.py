@@ -14,7 +14,9 @@ from typing import Any, Iterator
 class Store:
     def __init__(self, path: str = ":memory:") -> None:
         self.path = path
-        self._db = sqlite3.connect(path, isolation_level="DEFERRED")
+        # Callers serialise access (the API holds one lock per request), so the
+        # connection may be used from the web server's worker threads.
+        self._db = sqlite3.connect(path, isolation_level="DEFERRED", check_same_thread=False)
         if path != ":memory:":
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute("PRAGMA synchronous=FULL")
