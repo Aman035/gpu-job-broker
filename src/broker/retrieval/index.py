@@ -13,8 +13,9 @@ Pipeline (each step is measured in docs/RETRIEVAL.md):
    vocabulary failures are logged in ("disk is full" -> "no space left on device").
 5. Score with BM25 over signal lines plus the recorded resolution, whose plain
    wording bridges different log formats of the same cause.
-6. Abstain when nothing in the question looks like a failure: return no results
-   rather than the five least-bad matches.
+6. Abstain unless the question describes a failure (failure words, phrases such
+   as "ran out", or a status code) or literally matches a log line: return no
+   results rather than the five least-bad matches.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .glossary import expand
+from .glossary import describes_failure, expand
 from .text import LineFilter, redact, tokenize
 
 DEFAULT_LOGS = Path(__file__).resolve().parents[3] / "data" / "01b_failure_logs.jsonl"
@@ -85,6 +86,7 @@ class SearchOptions:
     index_resolution: bool = True
     group_by_fix: bool = True
     abstain: bool = True
+    abstain_unless_failure: bool = True  # False: v1 rule, any glossary concept counts as on-topic
     min_raw_score: float = 6.0  # for questions that hit no glossary concept
 
 
@@ -97,9 +99,11 @@ class FailureIndex:
         self.logs = logs
         self.filter = LineFilter([entry.log for entry in logs])
         self.docs: list[Counter[str]] = []
+        self.log_docs: list[Counter[str]] = []  # signal lines only, for the literal-match check
         for entry in logs:
             entry.signal = self.filter.signal_lines(entry.log) if self.options.filter_lines else entry.log.splitlines()
             text = " ".join(entry.signal)
+            self.log_docs.append(Counter(tokenize(text)))
             if self.options.index_resolution:
                 text += " " + entry.resolution
             self.docs.append(Counter(tokenize(text)))
@@ -152,8 +156,11 @@ class FailureIndex:
             ((s, i) for i, s in enumerate(doc_scores)),
             key=lambda x: (-x[0], self.logs[x[1]].id),
         )
-        best_raw = max((self._bm25(raw, doc) for doc in self.docs), default=0.0)
-        abstain = self.options.abstain and not concepts and best_raw < self.options.min_raw_score
+        # Literal fallback for pasted logs: compare against log lines only, not the
+        # human-written fix text, which shares everyday words with questions.
+        best_raw = max((self._bm25(raw, doc) for doc in self.log_docs), default=0.0)
+        on_topic = describes_failure(text) if self.options.abstain_unless_failure else bool(concepts)
+        abstain = self.options.abstain and not on_topic and best_raw < self.options.min_raw_score
         if abstain or not scored or scored[0][0] <= 0:
             return SearchResult([], True, concepts, None, False)
 

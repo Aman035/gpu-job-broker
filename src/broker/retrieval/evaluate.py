@@ -119,7 +119,8 @@ def ablation() -> list[tuple[str, SearchOptions]]:
             "+ rank by shared fix",
             replace(base, filter_lines=True, index_resolution=True, expand_query=True, group_by_fix=True),
         ),
-        ("+ abstain when nothing matches (final)", SearchOptions()),
+        ("+ abstain unless a glossary concept is hit (v1)", SearchOptions(abstain_unless_failure=False)),
+        ("+ abstain unless the question describes a failure (final)", SearchOptions()),
     ]
     return steps
 

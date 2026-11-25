@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from .text import stem, tokenize
 
 # Each concept: words people use (triggers) -> words failures are logged in.
@@ -66,3 +68,31 @@ def expand(tokens: list[str]) -> tuple[dict[str, float], list[str]]:
         for t in _CONCEPTS[name][1]:
             weights[t] = max(weights.get(t, 0.0), EXPANSION_WEIGHT)
     return weights, hit
+
+
+# ---- does the question describe a failure? ------------------------------------
+#
+# Glossary words alone do not mean a question is about a failure: "how much
+# memory does a node have" or "how do I create a token" use failure vocabulary
+# to ask something else. A question is answered only if it describes something
+# going wrong. This list is general operations vocabulary, not tuned to any test
+# question.
+
+_FAILURE_WORDS_TEXT = """error errors fail fails failed failing failure crash crashed crashes died dies dead killed kill
+    abort aborted denied refused rejected unauthorized forbidden expired invalid missing lost vanished
+    disappeared hang hangs hung stuck timeout nan inf infinite exploded blew unstable diverged broken broke
+    exhausted oom overflow stopped interrupted preempted reclaimed terminated complains complaining problem
+    full incompatible mismatch"""
+FAILURE_WORDS = {stem(w) for w in _FAILURE_WORDS_TEXT.split()}
+FAILURE_PHRASES = re.compile(
+    r"\b(can'?t|cannot|could ?n[o']t|couldn'?t|won'?t|unable|not found|no longer|ran out|run out|runs out|"
+    r"out of|no space|too old|not allowed|taken back|timed out|times out|went wrong)\b",
+    re.IGNORECASE,
+)
+STATUS_CODE = re.compile(r"\b[1-5]\d\d\b")  # HTTP and exit codes such as 137, 401, 403
+
+
+def describes_failure(text: str) -> bool:
+    if FAILURE_PHRASES.search(text) or STATUS_CODE.search(text):
+        return True
+    return bool(FAILURE_WORDS & set(tokenize(text)))

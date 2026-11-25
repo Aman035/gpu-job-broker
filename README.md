@@ -168,10 +168,14 @@ stateDiagram-v2
 |---|---|---|---|
 | 24 given questions (glossary written after reading them) | 1.00 | 0.99 | 6 of 6 |
 | 24 own paraphrases (written first, but in view while building) | 0.96 | 0.97 | 5 of 5 |
-| **24 blind questions** (written by an agent that never saw the code) | **1.00** | **0.98** | **2 of 6** |
+| **24 blind questions** (written by an agent that never saw the code) | **0.94** | **0.92** | **4 of 6** |
 
 - **Pipeline:** secret redaction → boilerplate filter learned from the corpus
   → error-aware tokens → small glossary → BM25 → ranking by shared fix.
+- **Abstention:** a question is answered only if it describes a failure or
+  matches a log line. On the blind set this refuses 4 of 6 off-topic questions
+  (up from 2 with the first rule) at the cost of refusing 1 real failure worded
+  informally. It is the weakest part and is documented as such.
 - **Embeddings** were measured (in a throwaway environment, not re-runnable
   from the repo) and left out: they added nothing on this data.
 - Ablation and known limits: [docs/RETRIEVAL.md](docs/RETRIEVAL.md).

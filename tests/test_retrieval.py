@@ -83,3 +83,18 @@ def test_identical_logs_with_different_fixes_are_flagged(index):
 def test_off_topic_question_returns_nothing(index):
     result = index.search("how do I book a meeting room")
     assert result.abstained and result.matches == []
+
+
+@pytest.mark.parametrize(
+    "question",
+    ["how much memory does a gpu-l node have", "how do I free up memory on my laptop", "my job is slow"],
+)
+def test_failure_words_are_needed_not_just_topic_words(index, question):
+    """Topic words like "memory" alone do not make a question about a failure."""
+    assert index.search(question).abstained
+
+
+def test_real_failure_with_the_same_topic_word_is_still_answered(index):
+    result = index.search("my training job died, GPU memory exhausted")  # given question Q05
+    assert not result.abstained
+    assert result.suggested_resolution.startswith("Reduce batch size")

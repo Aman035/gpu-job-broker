@@ -32,20 +32,31 @@ numbers" below):
 | + index the resolution text | 0.81 / 0.80 | 0.65 / 0.58 | 0.74 / 0.67 | 0.80 |
 | + glossary query expansion | 0.98 / 0.93 | 0.95 / 0.89 | 0.98 / 0.93 | 0.90 |
 | + rank by shared fix | 1.00 / 0.99 | 0.96 / 0.97 | 1.00 / 0.98 | 1.00 |
-| + abstain when nothing matches | 1.00 / 0.99 | 0.96 / 0.97 | 1.00 / 0.98 | 1.00 |
+| + abstain unless a glossary concept is hit (v1) | 1.00 / 0.99 | 0.96 / 0.97 | 1.00 / 0.98 | 1.00 |
+| + abstain unless the question describes a failure (final) | 1.00 / 0.99 | 0.96 / 0.97 | 0.94 / 0.92 | 1.00 |
 
-Unanswerable questions correctly refused: given 6 of 6, own held-out 5 of 5,
-**blind 2 of 6**. No answerable question is wrongly refused. The blind result
-is the honest one: ranking generalises, abstention does not yet (see Limits).
+Unanswerable questions correctly refused:
+
+| Rule | Given | Own held-out | Blind |
+|---|---|---|---|
+| v1: any glossary concept counts as on-topic | 6 of 6 | 5 of 5 | 2 of 6 at first scoring (3 of 6 after the log-lines-only literal check) |
+| Final: the question must describe a failure | 6 of 6 | 5 of 5 | **4 of 6**, and 1 real failure wrongly refused |
+
+How the final rule was kept honest:
+
+- The blind set and its v1 score were committed first.
+- The rule was designed on the given set, my own held-out set and an
+  independent reviewer's questions, then frozen.
+- The blind set was scored once, and the result above is reported as it came
+  out, including what got worse.
 
 ```mermaid
 flowchart LR
     q["question or pasted log"] --> red["redact secrets"] --> sig["keep signal lines"] --> tok["tokenise"]
-    tok --> hit{"glossary<br/>concept hit?"}
-    hit -->|yes| exp["add glossary terms"] --> bm["BM25 over signal lines and fix text"]
-    hit -->|no| strong{"strong literal<br/>match?"}
-    strong -->|no| none["no match"]
-    strong -->|yes| bm
+    tok --> gate{"describes a failure,<br/>or matches a log line?"}
+    gate -->|no| none["no match"]
+    gate -->|yes| exp["add glossary terms<br/>for concepts hit"]
+    exp --> bm["BM25 over signal lines and fix text"]
     bm --> boost["boost logs that share a fix"] --> out["top k, suggested fix, ambiguity flag"]
 ```
 
@@ -65,9 +76,13 @@ flowchart LR
    that share its recorded fix. One strong match then lifts the same-cause
    logs that are worded differently. Logs without a fix stand alone, so the
    no-fix OOM logs are still found on their own text.
-6. **Abstain.** A free-text question that hits no failure concept and has no
-   strong literal match returns nothing. A wrong fix sent with confidence costs
-   more than "no match".
+6. **Abstain.** A question is answered only if it *describes a failure*
+   (general failure words such as `failed`, `died`, `expired`, phrases such as
+   "ran out" or "can't", or a status code such as 137 or 401), or if it
+   literally matches a log line, which covers pasted logs. Topic words alone,
+   such as `memory` or `token`, are not enough: "how much memory does a node
+   have" gets no match. A wrong fix sent with confidence costs more than "no
+   match".
 
 The response also carries a **suggested fix**: a score-weighted vote over the
 top matches, skipping logs with no fix, so a query that lands on F911 still
@@ -109,11 +124,16 @@ re-run from it.
 
 ## Limits and next steps
 
-- **Abstention depends on glossary coverage.** A real failure described in
-  words the glossary lacks, with no literal log match, gets no answer. This is
-  deliberate (refusing is safer than a wrong fix), but it is the main risk on
-  unseen questions. Next step: grow the glossary from incident tickets, and
-  revisit embeddings once there is enough data to show they help.
+- **Abstention is the main risk on unseen questions.** On the blind set:
+  - a failure described in informal words ("my spot machine got **yanked**")
+    is refused, because the failure-word list lacks them;
+  - a how-to question that shares a phrase with a log ("generate a personal
+    **access token**") passes the literal-match check;
+  - one word can mean two things ("early **stopping**" vs "heartbeats
+    stopped").
+  Next step: replace the word lists with a small classifier for "is this a
+  failure report?", trained on real support questions, and revisit embeddings
+  once there is enough data to show they help.
 - **"Same fix" is an exact string match.** Real tickets word one fix many ways;
   fixes would need clustering first.
 - **59 logs.** BM25 over an in-memory index is right at this size. At thousands

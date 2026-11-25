@@ -11,7 +11,8 @@ Sets run from least to most independent of the pipeline; see `src/broker/retriev
 | + index the resolution text | 0.81 / 0.80 / 2 of 6 (0) | 0.65 / 0.58 / 1 of 5 (1) | 0.74 / 0.67 / 0 of 6 (0) | 0.89 / 0.80 |
 | + glossary query expansion | 0.98 / 0.93 / 2 of 6 (0) | 0.95 / 0.89 / 1 of 5 (0) | 0.98 / 0.93 / 0 of 6 (0) | 0.94 / 0.90 |
 | + rank by shared fix | 1.00 / 0.99 / 2 of 6 (0) | 0.96 / 0.97 / 1 of 5 (0) | 1.00 / 0.98 / 0 of 6 (0) | 1.00 / 1.00 |
-| + abstain when nothing matches (final) | 1.00 / 0.99 / 6 of 6 (0) | 0.96 / 0.97 / 5 of 5 (0) | 1.00 / 0.98 / 2 of 6 (0) | 1.00 / 1.00 |
+| + abstain unless a glossary concept is hit (v1) | 1.00 / 0.99 / 6 of 6 (0) | 0.96 / 0.97 / 5 of 5 (0) | 1.00 / 0.98 / 3 of 6 (0) | 1.00 / 1.00 |
+| + abstain unless the question describes a failure (final) | 1.00 / 0.99 / 6 of 6 (0) | 0.96 / 0.97 / 5 of 5 (0) | 0.94 / 0.92 / 4 of 6 (1) | 1.00 / 1.00 |
 
 ## Per question (final pipeline)
 
@@ -77,15 +78,15 @@ Sets run from least to most independent of the pipeline; see `src/broker/retriev
 | blind | B10 | Watchdog caught collective operation timeout: WorkNCCL(OpType=ALLREDUCE) ran for 1800000 ms | 1.0 | F027, F030, F025, F026, F028 |
 | blind | B11 | ran out of storage on the box while saving checkpoints, job crashed | 1.0 | F033, F034, F031, F035, F036 |
 | blind | B12 | job died writing output, says the drive is full | 1.0 | F033, F034, F031, F035, F036 |
-| blind | B13 | my cheap spot machine got yanked away in the middle of training | 1.0 | F037, F041, F038, F039, F040 |
+| blind | B13 | my cheap spot machine got yanked away in the middle of training | 0.0 | (abstained) |
 | blind | B14 | node just vanished mid run, scheduler lost contact with it, do I need to resubmit? | 1.0 | F040, F042, F037, F041, F038 |
 | blind | B15 | getting 401s from the auth service partway through my job, my credentials seem to have timed out | 1.0 | F045, F047, F044, F048, F046 |
 | blind | B16 | calls to the models api start failing with an expired jwt after a day | 1.0 | F046, F043, F045, F047, F044 |
 | blind | B17 | job crashes on import, some cuda library .so file missing | 0.6 | F049, F052, F054, ~~F014~~, ~~F016~~ |
 | blind | B18 | pytorch complains the nvidia driver version is too old for the cuda it wants | 1.0 | F054, F049, F052, F050, F053 |
-| blind | B19 | how much does an hour on the big 80GB memory GPUs cost us per team? | MISS | F004, F006, F001, F002, F003 |
+| blind | B19 | how much does an hour on the big 80GB memory GPUs cost us per team? | ok | (abstained) |
 | blind | B20 | how do I add a new teammate to our project so they can submit jobs? | ok | (abstained) |
 | blind | B21 | what is the max number of nodes I can request for a single job before needing approval? | ok | (abstained) |
 | blind | B22 | how do I generate a personal access token for the CLI the first time? | MISS | F043, F045, F047, F046, F044 |
-| blind | B23 | can I get more disk quota for our team bucket for next quarter, who approves it? | MISS | F031, F035, F036, F033, F034 |
+| blind | B23 | can I get more disk quota for our team bucket for next quarter, who approves it? | ok | (abstained) |
 | blind | B24 | how do I set up early stopping and a learning rate schedule in our training template? | MISS | F022, F019, F020, F021, F024 |
