@@ -3,12 +3,17 @@
     broker-eval-retrieval
     broker-eval-retrieval --out docs/RETRIEVAL_RESULTS.md
 
-Three test sets:
-- the 24 labelled questions provided (01c);
-- 24 held-out paraphrases written before the pipeline was built and never used
-  for tuning (data/holdout_queries.jsonl), as a check on unseen questions;
-- every log used as the query (leave-one-out), for the "paste a failed job's
-  log" use. A log's relevant set is the other logs that share its cause.
+Four test sets, from least to most independent of the pipeline:
+- given (01c): the 24 labelled questions provided. The glossary was written
+  after reading them, so this score is optimistic.
+- own held-out (data/holdout_queries.jsonl): 24 paraphrases I wrote before the
+  pipeline. Not used for scoring decisions, but the glossary was written with
+  them in view, so they are not independent either.
+- blind (data/blind_queries.jsonl): 24 questions written by a separate agent
+  that saw only the brief and the 59 logs, never the code, glossary or other
+  questions. Its first score was recorded before any change to the pipeline.
+- log -> log: every log used as the query (leave-one-out), for the "paste a
+  failed job's log" use. Relevant = other logs of the same cause.
 """
 
 from __future__ import annotations
@@ -54,8 +59,9 @@ class Scores:
     abstain_total: int
     false_abstain: int  # questions with relevant logs that got no results
 
-    def row(self) -> str:
-        return f"{self.p3:.3f} | {self.p5:.3f} | {self.abstain_ok}/{self.abstain_total} | {self.false_abstain}"
+    def cell(self) -> str:
+        """P@3 / P@5 / unanswerable correctly refused (answerable wrongly refused)."""
+        return f"{self.p3:.2f} / {self.p5:.2f} / {self.abstain_ok} of {self.abstain_total} ({self.false_abstain})"
 
 
 def score(index: FailureIndex, queries: list[Query]) -> Scores:
@@ -123,30 +129,32 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--logs", type=Path, default=DEFAULT_LOGS)
     parser.add_argument("--queries", type=Path, default=DATA / "01c_retrieval_queries.jsonl")
     parser.add_argument("--holdout", type=Path, default=DATA / "holdout_queries.jsonl")
+    parser.add_argument("--blind", type=Path, default=DATA / "blind_queries.jsonl")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
 
-    given = load_queries(args.queries)
-    holdout = load_queries(args.holdout)
-    groups = cause_groups([given, holdout])
+    sets = [
+        ("given", load_queries(args.queries)),
+        ("own held-out", load_queries(args.holdout)),
+        ("blind", load_queries(args.blind)),
+    ]
+    groups = cause_groups([queries for _, queries in sets])
 
     lines = [
         "# Retrieval evaluation",
         "",
-        "P@k = share of the top k results whose id is relevant, averaged over questions that have relevant logs.",
-        "Abstain = questions with nothing relevant that correctly returned no results.",
-        "False abstain = questions with relevant logs that returned nothing.",
+        "Each cell: P@3 / P@5 / unanswerable questions correctly refused (answerable questions wrongly refused).",
+        "P@k is the share of the top k results whose id is relevant, averaged over questions that have relevant logs.",
+        "Sets run from least to most independent of the pipeline; see `src/broker/retrieval/evaluate.py`.",
         "",
-        "| Pipeline | Given P@3 | Given P@5 | Given abstain | Given false abstain "
-        "| Held-out P@3 | Held-out P@5 | Held-out abstain | Held-out false abstain | Log→log P@3 | Log→log P@5 |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "| Pipeline | Given | Own held-out | Blind | Log→log P@3 / P@5 |",
+        "|---|---|---|---|---|",
     ]
     for label, options in ablation():
         index = FailureIndex.from_jsonl(args.logs, options)
-        g = score(index, given)
-        h = score(index, holdout)
+        cells = [score(index, queries).cell() for _, queries in sets]
         l3, l5 = leave_one_out(index, groups)
-        lines.append(f"| {label} | {g.row()} | {h.row()} | {l3:.3f} | {l5:.3f} |")
+        lines.append(f"| {label} | " + " | ".join(cells) + f" | {l3:.2f} / {l5:.2f} |")
 
     final = FailureIndex.from_jsonl(args.logs)
     lines += [
@@ -156,7 +164,7 @@ def main(argv: list[str] | None = None) -> None:
         "| Set | Id | Question | P@5 | Top 5 |",
         "|---|---|---|---|---|",
     ]
-    for name, queries in (("given", given), ("held-out", holdout)):
+    for name, queries in sets:
         for q in queries:
             result = final.search(q.text, k=5)
             ids = [m.id for m in result.matches]

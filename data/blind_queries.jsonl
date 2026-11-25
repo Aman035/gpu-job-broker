@@ -1,0 +1,24 @@
+{"qid": "B01", "query": "my training job keeps getting killed, looks like the gpu ran out of room when I bumped the batch size", "expected_ids": ["F001", "F002", "F003", "F004", "F005", "F006", "F910", "F911", "F912"]}
+{"qid": "B02", "query": "exit 137 again right after the data finishes loading, what do I do", "expected_ids": ["F001", "F002", "F003", "F004", "F005", "F006", "F910", "F911", "F912"]}
+{"qid": "B03", "query": "job is stuck at startup, says it cant fetch the container image, unauthorized", "expected_ids": ["F007", "F008", "F009", "F010", "F011", "F012"]}
+{"qid": "B04", "query": "docker says access denied when my job tries to grab the training image, did our registry login lapse?", "expected_ids": ["F007", "F008", "F009", "F010", "F011", "F012"]}
+{"qid": "B05", "query": "script crashes immediately saying it cant find my data files, path looks right to me", "expected_ids": ["F013", "F014", "F015", "F016", "F017", "F018"]}
+{"qid": "B06", "query": "PermissionError: [Errno 13] Permission denied: '/mnt/datasets/vision/labels.csv'", "expected_ids": ["F013", "F014", "F015", "F016", "F017", "F018"]}
+{"qid": "B07", "query": "loss blew up to nan after a few thousand steps, any idea how to stop it", "expected_ids": ["F019", "F020", "F021", "F022", "F023", "F024"]}
+{"qid": "B08", "query": "my model trained fine for a while then the loss just exploded and the run aborted", "expected_ids": ["F019", "F020", "F021", "F022", "F023", "F024"]}
+{"qid": "B09", "query": "multi gpu run hangs then dies, something about the gpus not talking to each other", "expected_ids": ["F025", "F026", "F027", "F028", "F029", "F030"]}
+{"qid": "B10", "query": "Watchdog caught collective operation timeout: WorkNCCL(OpType=ALLREDUCE) ran for 1800000 ms", "expected_ids": ["F025", "F026", "F027", "F028", "F029", "F030"]}
+{"qid": "B11", "query": "ran out of storage on the box while saving checkpoints, job crashed", "expected_ids": ["F031", "F032", "F033", "F034", "F035", "F036"]}
+{"qid": "B12", "query": "job died writing output, says the drive is full", "expected_ids": ["F031", "F032", "F033", "F034", "F035", "F036"]}
+{"qid": "B13", "query": "my cheap spot machine got yanked away in the middle of training", "expected_ids": ["F037", "F038", "F039", "F040", "F041", "F042"]}
+{"qid": "B14", "query": "node just vanished mid run, scheduler lost contact with it, do I need to resubmit?", "expected_ids": ["F037", "F038", "F039", "F040", "F041", "F042"]}
+{"qid": "B15", "query": "getting 401s from the auth service partway through my job, my credentials seem to have timed out", "expected_ids": ["F043", "F044", "F045", "F046", "F047", "F048"]}
+{"qid": "B16", "query": "calls to the models api start failing with an expired jwt after a day", "expected_ids": ["F043", "F044", "F045", "F046", "F047", "F048"]}
+{"qid": "B17", "query": "job crashes on import, some cuda library .so file missing", "expected_ids": ["F049", "F050", "F051", "F052", "F053", "F054"]}
+{"qid": "B18", "query": "pytorch complains the nvidia driver version is too old for the cuda it wants", "expected_ids": ["F049", "F050", "F051", "F052", "F053", "F054"]}
+{"qid": "B19", "query": "how much does an hour on the big 80GB memory GPUs cost us per team?", "expected_ids": []}
+{"qid": "B20", "query": "how do I add a new teammate to our project so they can submit jobs?", "expected_ids": []}
+{"qid": "B21", "query": "what is the max number of nodes I can request for a single job before needing approval?", "expected_ids": []}
+{"qid": "B22", "query": "how do I generate a personal access token for the CLI the first time?", "expected_ids": []}
+{"qid": "B23", "query": "can I get more disk quota for our team bucket for next quarter, who approves it?", "expected_ids": []}
+{"qid": "B24", "query": "how do I set up early stopping and a learning rate schedule in our training template?", "expected_ids": []}

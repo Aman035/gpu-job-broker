@@ -22,17 +22,21 @@ Full per-question results: [RETRIEVAL_RESULTS.md](RETRIEVAL_RESULTS.md)
 
 ## Pipeline and what each step buys
 
-| Step | Given P@3 / P@5 | Held-out P@3 / P@5 | Log→log P@5 |
-|---|---|---|---|
-| BM25 on the raw log | 0.67 / 0.57 | 0.61 / 0.52 | 0.48 |
-| + keep signal lines only | 0.67 / 0.62 | 0.67 / 0.57 | 0.74 |
-| + index the resolution text | 0.81 / 0.80 | 0.65 / 0.58 | 0.80 |
-| + glossary query expansion | 0.98 / 0.93 | 0.95 / 0.90 | 0.90 |
-| + rank by shared fix | 1.00 / 0.99 | 0.97 / 0.97 | 1.00 |
-| + abstain when nothing matches | 1.00 / 0.99 | 0.97 / 0.97 | 1.00 |
+P@3 / P@5 per test set (the sets are explained under "How honest are these
+numbers" below):
 
-Abstention: 6 of 6 given and 5 of 5 held-out unanswerable questions return
-nothing, and no answerable question is wrongly refused.
+| Step | Given | Own held-out | Blind | Log→log P@5 |
+|---|---|---|---|---|
+| BM25 on the raw log | 0.67 / 0.57 | 0.61 / 0.52 | 0.63 / 0.56 | 0.48 |
+| + keep signal lines only | 0.67 / 0.62 | 0.67 / 0.57 | 0.57 / 0.54 | 0.74 |
+| + index the resolution text | 0.81 / 0.80 | 0.65 / 0.58 | 0.74 / 0.67 | 0.80 |
+| + glossary query expansion | 0.98 / 0.93 | 0.95 / 0.89 | 0.98 / 0.93 | 0.90 |
+| + rank by shared fix | 1.00 / 0.99 | 0.96 / 0.97 | 1.00 / 0.98 | 1.00 |
+| + abstain when nothing matches | 1.00 / 0.99 | 0.96 / 0.97 | 1.00 / 0.98 | 1.00 |
+
+Unanswerable questions correctly refused: given 6 of 6, own held-out 5 of 5,
+**blind 2 of 6**. No answerable question is wrongly refused. The blind result
+is the honest one: ranking generalises, abstention does not yet (see Limits).
 
 ```mermaid
 flowchart LR
@@ -73,14 +77,19 @@ silently.
 
 ## How honest are these numbers
 
-- **The given set is optimistic.** I wrote the glossary after reading those
+- **Given (01c): optimistic.** The glossary was written after reading these
   24 questions.
-- **The held-out set is the better estimate.** I wrote its 24 paraphrases
-  (`data/holdout_queries.jsonl`) before building the pipeline and did not tune
-  on them; the four remaining misses there are left as they are. I wrote both
-  the set and the pipeline, so your unseen questions are the real test.
-- **Log→log** uses every log as the query, excluding itself, with relevance
-  being the other logs of the same cause.
+- **Own held-out: not independent.** I wrote these 24 paraphrases
+  (`data/holdout_queries.jsonl`) before the pipeline and never scored
+  decisions on them, but I wrote the glossary afterwards with them in view;
+  several glossary words (`vram`, `spot`, `preempted`, `session`) appear only
+  there. Treat it as a second development set.
+- **Blind: the honest estimate.** 24 questions (`data/blind_queries.jsonl`)
+  written by a separate agent that saw only the brief and the 59 logs, never
+  the code, glossary or other questions. It was committed, and its first score
+  recorded, before any further change to the pipeline.
+- **Log→log** uses every log as the query, excluding itself; relevant means
+  the other logs of the same cause.
 
 ## Embeddings: measured, not shipped
 
@@ -94,6 +103,9 @@ answerable and unanswerable questions (0.65 vs 0.66), so it does not help
 abstention. Failures here are identified by exact error strings, which is
 lexical retrieval's strength. Embeddings would add about 200 MB of
 dependencies and a model download for no measured gain, so they are left out.
+This comparison ran in a separate throwaway environment, before the blind set
+existed; the script is not part of the repo, so these figures cannot be
+re-run from it.
 
 ## Limits and next steps
 
