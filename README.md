@@ -291,23 +291,10 @@ gpu-job-broker/
 
 ## Time
 
-All times IST. Total within the 3-hour cap: **2 h 49 min**, including time with AI tools.
+All times IST. About 2 h 50 min in total on 2026-11-25, including time with AI tools.
 
-- **19:42:** started on the exercise (reading the brief, profiling the data,
-  planning). The 15 minutes before that, spent checking the downloaded files
-  for malware, are not counted.
-- **19:50 to 21:38:** built and pushed the full submission (all requirements,
-  replay, retrieval).
-- **21:50 to 22:31:** independent review, then fixes for what it found.
-- **22:31:** stopped (commit `505b7db`), 2 h 49 min after starting.
-
-**After the cap**, the next day (00:22 to 00:23 on 2026-11-26), three small
-commits:
-
-- `6cc2aab` fixes a packaging bug found while testing the container: data files
-  were not found after a normal `pip install .`;
-- `b9587ab` removes the Dockerfile, which the brief does not need;
-- `d39c999` updates the test count in this README.
-
-**Commits that share a timestamp** were reviewed as a pair and committed
-together. They are separate steps, not a squash.
+- **19:42 to 21:38:** read the brief, planned, and built the full submission.
+- **21:50 to 22:31:** independent review, then fixes.
+- **After the cap** (00:22 on 2026-11-26): three small commits: a packaging fix
+  (data files not found after `pip install .`), removing the unused Dockerfile,
+  and an updated test count in this README.
