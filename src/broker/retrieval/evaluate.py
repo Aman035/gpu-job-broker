@@ -10,6 +10,7 @@ Three test sets:
 - every log used as the query (leave-one-out), for the "paste a failed job's
   log" use. A log's relevant set is the other logs that share its cause.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,9 +19,9 @@ import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from .retrieval import DEFAULT_LOGS, FailureIndex, SearchOptions
+from .index import DEFAULT_LOGS, FailureIndex, SearchOptions
 
-DATA = Path(__file__).resolve().parents[2] / "data"
+DATA = Path(__file__).resolve().parents[3] / "data"
 
 
 @dataclass
@@ -54,9 +55,7 @@ class Scores:
     false_abstain: int  # questions with relevant logs that got no results
 
     def row(self) -> str:
-        return (
-            f"{self.p3:.3f} | {self.p5:.3f} | {self.abstain_ok}/{self.abstain_total} | {self.false_abstain}"
-        )
+        return f"{self.p3:.3f} | {self.p5:.3f} | {self.abstain_ok}/{self.abstain_total} | {self.false_abstain}"
 
 
 def score(index: FailureIndex, queries: list[Query]) -> Scores:
@@ -102,13 +101,18 @@ def leave_one_out(index: FailureIndex, groups: list[set[str]]) -> tuple[float, f
 
 
 def ablation() -> list[tuple[str, SearchOptions]]:
-    base = SearchOptions(filter_lines=False, expand_query=False, index_resolution=False, group_by_fix=False, abstain=False)
+    base = SearchOptions(
+        filter_lines=False, expand_query=False, index_resolution=False, group_by_fix=False, abstain=False
+    )
     steps = [
         ("BM25 on the raw log", base),
         ("+ keep signal lines only", replace(base, filter_lines=True)),
         ("+ index the resolution text", replace(base, filter_lines=True, index_resolution=True)),
         ("+ glossary query expansion", replace(base, filter_lines=True, index_resolution=True, expand_query=True)),
-        ("+ rank by shared fix", replace(base, filter_lines=True, index_resolution=True, expand_query=True, group_by_fix=True)),
+        (
+            "+ rank by shared fix",
+            replace(base, filter_lines=True, index_resolution=True, expand_query=True, group_by_fix=True),
+        ),
         ("+ abstain when nothing matches (final)", SearchOptions()),
     ]
     return steps
@@ -145,7 +149,13 @@ def main(argv: list[str] | None = None) -> None:
         lines.append(f"| {label} | {g.row()} | {h.row()} | {l3:.3f} | {l5:.3f} |")
 
     final = FailureIndex.from_jsonl(args.logs)
-    lines += ["", "## Per question (final pipeline)", "", "| Set | Id | Question | P@5 | Top 5 |", "|---|---|---|---|---|"]
+    lines += [
+        "",
+        "## Per question (final pipeline)",
+        "",
+        "| Set | Id | Question | P@5 | Top 5 |",
+        "|---|---|---|---|---|",
+    ]
     for name, queries in (("given", given), ("held-out", holdout)):
         for q in queries:
             result = final.search(q.text, k=5)

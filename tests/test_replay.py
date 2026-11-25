@@ -1,7 +1,7 @@
 from broker.config import BrokerConfig
 from broker.models import TERMINAL_STATUSES
-from broker.provider import ProviderConfig
-from broker.replay import DEFAULT_TRACE, load_trace, percentile, replay
+from broker.sim.fake_provider import ProviderConfig
+from broker.sim.replay import DEFAULT_TRACE, load_trace, percentile, replay
 
 
 def test_trace_is_sorted_and_duplicates_collapsed():

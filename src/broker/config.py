@@ -1,4 +1,5 @@
 """Broker configuration. Every policy knob discussed in DECISIONS.md lives here."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

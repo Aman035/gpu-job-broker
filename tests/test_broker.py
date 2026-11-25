@@ -1,9 +1,9 @@
 import pytest
 
-from broker.broker import Broker, IdempotencyConflict, InvalidTransition, ValidationError
 from broker.config import BrokerConfig
 from broker.models import JobStatus, NodeState
-from broker.provider import FakeProvider
+from broker.service import Broker, IdempotencyConflict, InvalidTransition, ValidationError
+from broker.sim.fake_provider import FakeProvider
 from broker.store import Store
 from conftest import reliable_provider_config
 
@@ -31,8 +31,14 @@ def test_reused_key_with_different_body_is_rejected(make_broker):
 
 @pytest.mark.parametrize(
     "team,gpus,minutes,priority",
-    [("nlp", 3, 30, "normal"), ("nlp", 16, 30, "normal"), ("nlp", 1, 0, "normal"),
-     ("", 1, 30, "normal"), ("NLP team", 1, 30, "normal"), ("nlp", 1, 30, "urgent")],
+    [
+        ("nlp", 3, 30, "normal"),
+        ("nlp", 16, 30, "normal"),
+        ("nlp", 1, 0, "normal"),
+        ("", 1, 30, "normal"),
+        ("NLP team", 1, 30, "normal"),
+        ("nlp", 1, 30, "urgent"),
+    ],
 )
 def test_invalid_submissions_are_rejected(make_broker, team, gpus, minutes, priority):
     with pytest.raises(ValidationError):
@@ -159,7 +165,8 @@ def test_failed_type_backs_off_and_larger_type_is_tried(make_broker):
 
     def no_small_nodes(type_name, now, **kw):
         if type_name == "gpu-s":
-            from broker.provider import CapacityUnavailable
+            from broker.cloud import CapacityUnavailable
+
             raise CapacityUnavailable("none")
         return real_launch(type_name, now, **kw)
 

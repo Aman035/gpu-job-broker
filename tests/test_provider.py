@@ -1,6 +1,7 @@
 import pytest
 
-from broker.provider import CapacityUnavailable, FakeProvider, ProviderConfig, QuotaExceeded
+from broker.cloud import CapacityUnavailable, QuotaExceeded
+from broker.sim.fake_provider import FakeProvider, ProviderConfig
 from broker.store import Store
 
 MIN = 60.0
@@ -9,8 +10,12 @@ HOUR = 3600.0
 
 def reliable(**overrides) -> ProviderConfig:
     """A provider with no random launch failures, for tests that need certainty."""
-    base = dict(baseline_failure_prob=0.0, outage_start_prob_per_hour=0.0,
-                interruptible_outage_start_prob_per_hour=0.0, never_ready_prob=0.0)
+    base = dict(
+        baseline_failure_prob=0.0,
+        outage_start_prob_per_hour=0.0,
+        interruptible_outage_start_prob_per_hour=0.0,
+        never_ready_prob=0.0,
+    )
     base.update(overrides)
     return ProviderConfig(**base)
 
@@ -88,7 +93,7 @@ def test_capacity_failures_come_in_bursts():
         except CapacityUnavailable:
             outcomes.append(True)
     failures = sum(outcomes)
-    after_failure = [b for a, b in zip(outcomes, outcomes[1:]) if a]
+    after_failure = [b for a, b in zip(outcomes, outcomes[1:], strict=False) if a]
     assert 0 < failures < len(outcomes) / 2
     # A failure makes the next attempt far more likely to fail than average.
     assert sum(after_failure) / len(after_failure) > 3 * failures / len(outcomes)

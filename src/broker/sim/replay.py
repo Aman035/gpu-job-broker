@@ -1,8 +1,9 @@
 """Replay the submission trace through the simulator and compare policies.
 
-    broker-replay                      # fair share vs FIFO, plus sensitivity runs
-    broker-replay --out docs/RESULTS.md
+broker-replay                      # fair share vs FIFO, plus sensitivity runs
+broker-replay --out docs/RESULTS.md
 """
+
 from __future__ import annotations
 
 import argparse
@@ -14,13 +15,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from .broker import Broker, ValidationError
-from .config import MINUTE, BrokerConfig
-from .models import JobStatus
-from .provider import FakeProvider, ProviderConfig
-from .store import Store
+from ..config import MINUTE, BrokerConfig
+from ..models import JobStatus
+from ..service import Broker, ValidationError
+from ..store import Store
+from .fake_provider import FakeProvider, ProviderConfig
 
-DEFAULT_TRACE = Path(__file__).resolve().parents[2] / "data" / "01a_trace.csv"
+DEFAULT_TRACE = Path(__file__).resolve().parents[3] / "data" / "01a_trace.csv"
 
 
 @dataclass
@@ -72,12 +73,12 @@ def load_trace(path: Path, keep_duplicates: bool = False) -> TraceLoad:
     if not keep_duplicates:
         seen: set[str] = set()
         kept = []
-        for r in rows:
-            if r.key in seen:
+        for row in rows:
+            if row.key in seen:
                 load.duplicates += 1
                 continue
-            seen.add(r.key)
-            kept.append(r)
+            seen.add(row.key)
+            kept.append(row)
         load.rows = kept
     return load
 
@@ -110,7 +111,11 @@ class ReplayResult:
 
     def started_within(self, minutes: float) -> float:
         jobs = list(self.broker.jobs.values())
-        ok = sum(1 for j in jobs if j.first_started_at is not None and j.first_started_at - j.submitted_at <= minutes * MINUTE)
+        ok = sum(
+            1
+            for j in jobs
+            if j.first_started_at is not None and j.first_started_at - j.submitted_at <= minutes * MINUTE
+        )
         return ok / len(jobs)
 
     def summary(self) -> dict:
@@ -162,7 +167,11 @@ def replay(
         except ValidationError as exc:
             rejected.append((row.line, str(exc)))
     broker.run_until_idle()
-    unfinished = [j.id for j in broker.jobs.values() if j.status not in (JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED)]
+    unfinished = [
+        j.id
+        for j in broker.jobs.values()
+        if j.status not in (JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED)
+    ]
     if unfinished:
         raise RuntimeError(f"replay ended with unfinished jobs: {unfinished[:5]}")
     return ReplayResult(label=label or config.policy, broker=broker, rejected=rejected, duplicates=trace.duplicates)
@@ -188,9 +197,7 @@ class Scenario:
         return statistics.stdev(values) if len(values) > 1 else 0.0
 
     def pooled_waits(self, team: str | None = None) -> list[float]:
-        return [
-            w for r in self.runs for t, ws in r.waits_by_team().items() if team is None or t == team for w in ws
-        ]
+        return [w for r in self.runs for t, ws in r.waits_by_team().items() if team is None or t == team for w in ws]
 
     def team_cost(self, team: str) -> tuple[float, float]:
         costs = [r.broker.cost_report().teams[team] for r in self.runs if team in r.broker.cost_report().teams]
@@ -229,7 +236,7 @@ def team_table(scenarios: list[Scenario]) -> str:
         cells = [team, str(jobs)]
         for sc in scenarios:
             w = sc.pooled_waits(team)
-            cells.append(f"{_fmt(percentile(w, .5))} / {_fmt(percentile(w, .9))} / {_fmt(percentile(w, .99))}")
+            cells.append(f"{_fmt(percentile(w, 0.5))} / {_fmt(percentile(w, 0.9))} / {_fmt(percentile(w, 0.99))}")
         for sc in scenarios:
             total, idle = sc.team_cost(team)
             cells.append(f"{_fmt(total, 0)} ({idle:.0%})")

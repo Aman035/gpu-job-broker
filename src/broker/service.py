@@ -6,17 +6,20 @@ expiry, aging), jumps the clock there and processes it. Nothing lives in an
 in-memory timer, so a restart loses nothing but the capacity back-off state,
 which is safe to lose.
 """
+
 from __future__ import annotations
 
-import math
+import logging
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 
+from . import policy
+from .cloud import CapacityUnavailable, CloudProvider, QuotaExceeded
 from .config import BrokerConfig
 from .models import (
     ALLOWED_GPUS,
     NODE_TYPES_BY_SIZE,
-    PRIORITY_RANK,
     TERMINAL_STATUSES,
     Job,
     JobStatus,
@@ -26,12 +29,13 @@ from .models import (
     Run,
     node_price,
 )
-from .provider import CapacityUnavailable, FakeProvider, QuotaExceeded
 from .store import Store
 
 TEAM_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 MAX_ESTIMATE_MINUTES = 7 * 24 * 60
 EPS = 1e-6
+
+log = logging.getLogger(__name__)
 
 
 class BrokerError(Exception):
@@ -63,7 +67,7 @@ class _Backoff:
 class Broker:
     def __init__(
         self,
-        provider: FakeProvider,
+        provider: CloudProvider,
         store: Store | None = None,
         config: BrokerConfig | None = None,
         start_time: float = 0.0,
@@ -112,9 +116,7 @@ class Broker:
             existing = self._idem.get(idempotency_key)
             if existing is not None:
                 if existing["fingerprint"] != fingerprint:
-                    raise IdempotencyConflict(
-                        f"idempotency key {idempotency_key!r} was used for a different request"
-                    )
+                    raise IdempotencyConflict(f"idempotency key {idempotency_key!r} was used for a different request")
                 return self.jobs[existing["job_id"]], False
 
         self._seq["job"] += 1
@@ -229,11 +231,7 @@ class Broker:
         )
 
     def effective_priority(self, job: Job) -> Priority:
-        if job.priority == Priority.LOW and (
-            job.pinned_on_demand or self.now - job.submitted_at >= self.config.low_priority_aging_s
-        ):
-            return Priority.NORMAL
-        return job.priority
+        return policy.effective_priority(job, self.now, self.config.low_priority_aging_s)
 
     # ======================================================================
     # Event processing
@@ -262,8 +260,8 @@ class Broker:
                 candidates.append(self._reap_deadline(node))
         has_waiting = False
         for job in self._open.values():
-            if job.status == JobStatus.RUNNING and job.actual_minutes is not None:
-                candidates.append(job.started_at + job.actual_minutes * 60)
+            if job.planned_end is not None:
+                candidates.append(job.planned_end)
             elif job.status == JobStatus.QUEUED and job.node_id is None:
                 has_waiting = True
                 if job.priority == Priority.LOW and not job.pinned_on_demand:
@@ -280,13 +278,16 @@ class Broker:
         for node in list(self.nodes.values()):
             if node.state not in (NodeState.BOOTING, NodeState.READY, NodeState.DRAINING):
                 continue
+            if node.provider_id is None:  # booting or later always has one; be defensive
+                self._node_gone(node, self.now, "unknown_to_provider")
+                continue
             try:
                 status = self.provider.describe(node.provider_id, self.now)
             except KeyError:
                 self._node_gone(node, self.now, "unknown_to_provider")
                 continue
             if status.status == "terminated":
-                self._node_gone(node, status.terminated_at, status.termination_reason)
+                self._node_gone(node, status.terminated_at or self.now, status.termination_reason)
             elif status.status == "pending":
                 if self.now >= node.launched_at + self.config.boot_timeout_s - EPS:
                     self._terminate(node, "boot_timeout")
@@ -324,6 +325,7 @@ class Broker:
             )
         except (CapacityUnavailable, QuotaExceeded):
             self.launch_failures += 1
+            log.warning("launch failed: %s%s for %s", type_name, " (interruptible)" if interruptible else "", team)
             del self.nodes[node.id]
             self._dirty.discard(("node", node.id))
             self.store.delete("node", node.id)
@@ -335,6 +337,7 @@ class Broker:
         self._backoff.pop(key, None)
         node.state = NodeState.BOOTING
         self._touch(node)
+        log.info("launched %s %s for %s", node.id, type_name, team)
         return node
 
     def _terminate(self, node: Node, reason: str) -> None:
@@ -346,6 +349,7 @@ class Broker:
         node.state = NodeState.TERMINATED
         node.terminated_at = at
         node.termination_reason = reason
+        log.info("node %s (%s) ended: %s", node.id, node.team, reason)
         node.idle_since = None
         self._touch(node)
         for job in self.jobs_on(node.id):
@@ -371,13 +375,14 @@ class Broker:
 
     def _reap_deadline(self, node: Node) -> float:
         # An idle node younger than the billing minimum is already paid for.
+        assert node.idle_since is not None
         return max(node.idle_since + self.config.idle_timeout_s, node.launched_at + self.config.min_billing_s)
 
     def _reap_idle_nodes(self) -> None:
         for node in list(self.nodes.values()):
-            if node.state == NodeState.READY and node.idle_since is not None:
-                if self.now >= self._reap_deadline(node) - EPS:
-                    self._terminate(node, "idle")
+            idle = node.state == NodeState.READY and node.idle_since is not None
+            if idle and self.now >= self._reap_deadline(node) - EPS:
+                self._terminate(node, "idle")
 
     # ---- job lifecycle -------------------------------------------------------
 
@@ -416,6 +421,7 @@ class Broker:
         job.node_id = None
         job.started_at = None
         job.queued_since = at
+        log.warning("job %s lost its node and was requeued", job.id)
         if pin:
             job.pinned_on_demand = True
         self._touch(job)
@@ -433,9 +439,9 @@ class Broker:
 
     def _finish_due_jobs(self) -> None:
         for job in list(self._open.values()):
-            if job.status == JobStatus.RUNNING and job.actual_minutes is not None:
-                if self.now >= job.started_at + job.actual_minutes * 60 - EPS:
-                    self._finish(job, job.planned_outcome or JobStatus.SUCCEEDED)
+            end = job.planned_end
+            if end is not None and self.now >= end - EPS:
+                self._finish(job, job.planned_outcome or JobStatus.SUCCEEDED)
 
     # ======================================================================
     # Scheduling
@@ -447,7 +453,9 @@ class Broker:
             return
         ordered = self._order(waiting)
         free = self._free_gpus()
-        self._rebalancing = self._nodes_to_drain_for_slots(ordered, free) if self.config.policy == "fairshare" else set()
+        self._rebalancing = (
+            self._nodes_to_drain_for_slots(ordered, free) if self.config.policy == "fairshare" else set()
+        )
         blocked: set[tuple[str, bool]] = set()
         for job in ordered:
             if job.node_id is not None:
@@ -461,30 +469,14 @@ class Broker:
     def _order(self, jobs: list[Job]) -> list[Job]:
         """Order waiting jobs according to the configured policy."""
         if self.config.policy == "fifo":
-            return sorted(jobs, key=lambda j: (-PRIORITY_RANK[j.priority], j.submitted_at, j.seq))
-
-        # Fair share: priority orders jobs inside a team; teams take turns,
-        # least recent usage first.
-        by_team: dict[str, list[Job]] = {}
-        for job in jobs:
-            by_team.setdefault(job.team, []).append(job)
-        for team_jobs in by_team.values():
-            team_jobs.sort(key=lambda j: (-PRIORITY_RANK[self.effective_priority(j)], j.submitted_at, j.seq))
-        teams = sorted(by_team, key=lambda t: (self.usage.get(t, 0.0) / self.config.team_weights.get(t, 1.0), t))
-        ordered: list[Job] = []
-        depth = 0
-        while len(ordered) < len(jobs):
-            for team in teams:
-                if depth < len(by_team[team]):
-                    ordered.append(by_team[team][depth])
-            depth += 1
-        return ordered
+            return policy.order_fifo(jobs)
+        return policy.order_fair_share(
+            jobs, self.usage, self.config.team_weights, self.now, self.config.low_priority_aging_s
+        )
 
     def _spot_eligible(self, job: Job) -> bool:
         return (
-            self.config.use_interruptible
-            and not job.pinned_on_demand
-            and self.effective_priority(job) == Priority.LOW
+            self.config.use_interruptible and not job.pinned_on_demand and self.effective_priority(job) == Priority.LOW
         )
 
     def _free_gpus(self) -> dict[str, int]:
@@ -533,20 +525,20 @@ class Broker:
             blocked.add((job.team, spot))
             return
 
-        # Size the node for the team's waiting demand in this class, capped at 8.
-        # Jobs arrive one at a time, so if the team already has nodes booting
-        # it is in a burst: grow the next node to cover that capacity too
-        # (1 -> 4 -> 8) instead of launching one small node per job.
         group = [j for j in ordered if j.team == job.team and j.node_id is None and self._spot_eligible(j) == spot]
-        demand = sum(j.gpus for j in group)
         booting = sum(
-            n.gpus for n in self.nodes.values()
+            n.gpus
+            for n in self.nodes.values()
             if n.team == job.team and n.interruptible == spot and n.state == NodeState.BOOTING
         )
-        need = max(job.gpus, min(demand + booting, NODE_TYPES_BY_SIZE[-1].gpus))
-        pressure = self.config.slot_pressure_fraction
-        if pressure is not None and alive >= self.config.max_nodes * pressure:
-            need = NODE_TYPES_BY_SIZE[-1].gpus
+        need = policy.gpus_to_launch(
+            job.gpus,
+            sum(j.gpus for j in group),
+            booting,
+            alive,
+            self.config.max_nodes,
+            self.config.slot_pressure_fraction,
+        )
         for node_type in NODE_TYPES_BY_SIZE:
             if node_type.gpus < need:
                 continue
@@ -569,8 +561,7 @@ class Broker:
         others_waiting = {j.team for j in ordered if j.node_id is None and j.team != team}
         if not others_waiting or self.config.max_nodes - alive > len(others_waiting):
             return False
-        teams_with_work = {j.team for j in self._open.values()}
-        share = math.ceil(self.config.max_nodes / max(1, len(teams_with_work)))
+        share = policy.slot_share(self.config.max_nodes, len({j.team for j in self._open.values()}))
         team_nodes = sum(1 for n in self.nodes.values() if n.alive and n.team == team)
         return team_nodes >= share
 
@@ -592,8 +583,7 @@ class Broker:
         if any(n.state == NodeState.READY and n.idle_since is not None for n in alive):
             return set()  # an idle node can simply be evicted
 
-        teams_with_work = {j.team for j in self._open.values()}
-        share = math.ceil(self.config.max_nodes / max(1, len(teams_with_work)))
+        share = policy.slot_share(self.config.max_nodes, len({j.team for j in self._open.values()}))
         node_count: dict[str, int] = {}
         for n in alive:
             node_count[n.team] = node_count.get(n.team, 0) + 1
@@ -603,9 +593,7 @@ class Broker:
             team = job.team
             if team in starved or node_count.get(team, 0) >= share:
                 continue
-            fits_own_node = any(
-                self.nodes[nid].team == team and gpus >= job.gpus for nid, gpus in free.items()
-            )
+            fits_own_node = any(self.nodes[nid].team == team and gpus >= job.gpus for nid, gpus in free.items())
             if not fits_own_node:
                 starved.append(team)
 
@@ -627,7 +615,7 @@ class Broker:
         ends = [
             j.started_at + j.estimated_minutes * 60
             for j in self._open.values()
-            if j.node_id == node.id and j.status == JobStatus.RUNNING
+            if j.node_id == node.id and j.status == JobStatus.RUNNING and j.started_at is not None
         ]
         return (max(ends, default=self.now), node.id)
 
@@ -650,15 +638,11 @@ class Broker:
         dt = self.now - self._usage_at
         if dt <= 0:
             return
-        half_life = self.config.fairshare_half_life_s
-        decay = 0.5 ** (dt / half_life)
         running: dict[str, int] = {}
         for job in self._open.values():
             if job.status == JobStatus.RUNNING:
                 running[job.team] = running.get(job.team, 0) + job.gpus
-        for team in set(self.usage) | set(running):
-            rate = running.get(team, 0)
-            self.usage[team] = self.usage.get(team, 0.0) * decay + rate * half_life / math.log(2) * (1 - decay)
+        self.usage = policy.decay_usage(self.usage, running, dt, self.config.fairshare_half_life_s)
         self._usage_at = self.now
 
     # ======================================================================
@@ -670,7 +654,7 @@ class Broker:
         self._dirty.add((kind, obj.id))
 
     def _commit(self) -> None:
-        tables = {"job": self.jobs, "node": self.nodes, "run": self.runs}
+        tables: dict[str, Mapping[str, Job | Node | Run]] = {"job": self.jobs, "node": self.nodes, "run": self.runs}
         for kind, obj_id in self._dirty:
             obj = tables[kind].get(obj_id)
             if obj is not None:
@@ -692,9 +676,11 @@ class Broker:
             status = provider_nodes.get(node.id)
             if status is None:
                 # The launch never reached the provider.
+                log.info("recovery: dropping launch intent %s, provider never saw it", node.id)
                 del self.nodes[node.id]
                 self.store.delete("node", node.id)
             else:
+                log.info("recovery: adopting %s launched before the restart", node.id)
                 node.provider_id = status.id
                 node.state = NodeState.BOOTING
                 self._touch(node)
@@ -702,6 +688,7 @@ class Broker:
         for token, status in provider_nodes.items():
             if token not in known and status.status != "terminated":
                 # Alive at the provider but unknown to us: it can only cost money.
+                log.warning("recovery: terminating orphan node %s", status.id)
                 self.provider.terminate_node(status.id, self.now)
         self._process()
 
@@ -719,4 +706,3 @@ class Broker:
             raise ValidationError(f"estimated_minutes must be in (0, {MAX_ESTIMATE_MINUTES}]")
         if priority not in {p.value for p in Priority}:
             raise ValidationError("priority must be low, normal or high")
-

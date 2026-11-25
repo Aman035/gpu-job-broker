@@ -2,9 +2,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from broker.api import create_app, parse_time
-from broker.broker import Broker
 from broker.config import BrokerConfig
-from broker.provider import FakeProvider
+from broker.service import Broker
+from broker.sim.fake_provider import FakeProvider
 from broker.store import Store
 from conftest import reliable_provider_config
 
@@ -72,9 +72,7 @@ def test_cost_report(client):
     report = client.get("/reports/cost").json()
     assert report["teams"][0]["team"] == "nlp"
     assert report["total_cost"] == pytest.approx(1.0)
-    window = client.get(
-        "/reports/cost", params={"start": "2025-03-03T00:00:00Z", "end": "2025-03-03T00:30:00Z"}
-    ).json()
+    window = client.get("/reports/cost", params={"start": "2025-03-03T00:00:00Z", "end": "2025-03-03T00:30:00Z"}).json()
     assert window["total_cost"] == pytest.approx(0.5)
     assert client.get("/reports/cost", params={"start": "yesterday"}).status_code == 422
 
@@ -86,3 +84,9 @@ def test_failure_search(client):
     assert len(body["matches"]) == 3 and not body["abstained"]
     assert body["suggested_resolution"].startswith("Reduce batch size")
     assert client.post("/failures/search", json={"query": ""}).status_code == 422
+
+
+def test_healthz(client):
+    submit(client)
+    body = client.get("/healthz").json()
+    assert body["status"] == "ok" and body["alive_nodes"] == 1 and body["queued_jobs"] == 1

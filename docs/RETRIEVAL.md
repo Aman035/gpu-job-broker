@@ -2,7 +2,7 @@
 
 `POST /failures/search {query, k}` takes a free-text question or a failed
 job's log and returns the most similar past failures, their fixes, a
-suggested fix, and whether it abstained. Code: `src/broker/retrieval.py`.
+suggested fix, and whether it abstained. Code: `src/broker/retrieval/`.
 Full per-question results: [RETRIEVAL_RESULTS.md](RETRIEVAL_RESULTS.md)
 (`broker-eval-retrieval` regenerates it).
 

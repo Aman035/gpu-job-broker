@@ -3,7 +3,7 @@ import json
 import pytest
 
 from broker.retrieval import FailureIndex, redact, tokenize
-from broker.retrieval_eval import DATA, load_queries, score
+from broker.retrieval.evaluate import DATA, load_queries, score
 
 SECRETS = ("EXAMPLE-NOT-A-REAL-TOKEN", "example-password-not-real")
 
@@ -37,7 +37,10 @@ def test_tokenizer_handles_error_text():
 
 def test_boilerplate_lines_are_learned_not_listed(index):
     assert "DEBUG heartbeat ok" not in sum((e.signal for e in index.logs), [])
-    assert any(line.startswith("RuntimeError: CUDA error: out of memory") for line in index.logs[0].signal + index.logs[1].signal + index.logs[2].signal + index.logs[3].signal)
+    assert any(
+        line.startswith("RuntimeError: CUDA error: out of memory")
+        for line in index.logs[0].signal + index.logs[1].signal + index.logs[2].signal + index.logs[3].signal
+    )
 
 
 def test_given_questions_meet_precision_and_abstain(index):
@@ -53,7 +56,12 @@ def test_held_out_paraphrases(index):
 
 
 def test_pasted_log_finds_same_cause(index):
-    log = "INFO epoch 3 started\nDEBUG heartbeat ok\nwrite /var/lib/jobs/nlp/out.log: no space left on device\nINFO epoch 4 started"
+    log = (
+        "INFO epoch 3 started\n"
+        "DEBUG heartbeat ok\n"
+        "write /var/lib/jobs/nlp/out.log: no space left on device\n"
+        "INFO epoch 4 started"
+    )
     result = index.search(log)
     assert {m.id for m in result.matches} <= {"F031", "F032", "F033", "F034", "F035", "F036"}
     assert result.suggested_resolution.startswith("Scratch disk full")

@@ -9,6 +9,7 @@ shared between teams). A team's cost is split into:
   reaper, unused GPUs on a partly filled node, failed launches and the 10-minute
   minimum-billing top-up).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

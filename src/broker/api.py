@@ -4,9 +4,11 @@ The broker is single-threaded by design: one lock serialises every request,
 so the scheduler never sees a half-applied change. At this scale (a handful
 of teams, at most 10 nodes) throughput is not a concern; correctness is.
 """
+
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import threading
 from datetime import datetime, timezone
@@ -16,11 +18,11 @@ from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from .broker import Broker, IdempotencyConflict, InvalidTransition, NotFound, ValidationError
 from .config import BrokerConfig
 from .models import Job, JobStatus, Node
-from .provider import FakeProvider
 from .retrieval import FailureIndex
+from .service import Broker, IdempotencyConflict, InvalidTransition, NotFound, ValidationError
+from .sim.fake_provider import FakeProvider
 from .store import Store
 
 
@@ -119,9 +121,7 @@ def create_app(broker: Broker, failures: FailureIndex | None = None) -> FastAPI:
     @app.post("/jobs", status_code=201)
     def submit_job(body: SubmitJob, idempotency_key: str | None = Header(default=None, max_length=128)):
         with lock:
-            job, created = broker.submit(
-                body.team, body.gpus, body.estimated_minutes, body.priority, idempotency_key
-            )
+            job, created = broker.submit(body.team, body.gpus, body.estimated_minutes, body.priority, idempotency_key)
             view = job_view(broker, job)
         return view if created else JSONResponse(status_code=200, content=view)
 
@@ -129,7 +129,8 @@ def create_app(broker: Broker, failures: FailureIndex | None = None) -> FastAPI:
     def list_jobs(status: JobStatus | None = None, team: str | None = None, limit: int = Query(100, le=1000)):
         with lock:
             jobs = [
-                j for j in broker.jobs.values()
+                j
+                for j in broker.jobs.values()
                 if (status is None or j.status == status) and (team is None or j.team == team)
             ]
             jobs.sort(key=lambda j: j.seq, reverse=True)
@@ -172,6 +173,18 @@ def create_app(broker: Broker, failures: FailureIndex | None = None) -> FastAPI:
         report["start"], report["end"] = iso(t0), iso(t1)
         return report
 
+    @app.get("/healthz")
+    def healthz():
+        """Liveness plus the numbers an on-call person looks at first."""
+        with lock:
+            return {
+                "status": "ok",
+                "now": iso(broker.now),
+                "alive_nodes": len(broker.alive_nodes()),
+                "queued_jobs": len(broker.queued_jobs()),
+                "launch_failures": broker.launch_failures,
+            }
+
     @app.get("/clock")
     def clock():
         with lock:
@@ -201,7 +214,9 @@ def main() -> None:
     parser.add_argument("--policy", default="fairshare", choices=["fairshare", "fifo"])
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
+    logging.basicConfig(level=args.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
     os.makedirs(args.data_dir, exist_ok=True)
     provider = FakeProvider(store=Store(os.path.join(args.data_dir, "provider.db")))

@@ -1,4 +1,5 @@
 """Domain types shared by the broker, the fake provider and the API."""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
@@ -63,7 +64,7 @@ class Job:
     id: str
     team: str
     gpus: int
-    estimated_minutes: int
+    estimated_minutes: float
     priority: Priority
     submitted_at: float
     status: JobStatus = JobStatus.QUEUED
@@ -87,6 +88,13 @@ class Job:
         self.status = JobStatus(self.status)
         if self.planned_outcome is not None:
             self.planned_outcome = JobStatus(self.planned_outcome)
+
+    @property
+    def planned_end(self) -> float | None:
+        """When a simulated running job ends; None if a client must report completion."""
+        if self.status != JobStatus.RUNNING or self.started_at is None or self.actual_minutes is None:
+            return None
+        return self.started_at + self.actual_minutes * 60
 
     def to_dict(self) -> dict:
         return asdict(self)

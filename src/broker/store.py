@@ -4,11 +4,13 @@ Entities are stored as JSON documents keyed by (kind, id). This keeps the
 schema trivial to evolve; the data set is small enough that every query the
 broker needs is done in memory after loading.
 """
+
 from __future__ import annotations
 
 import json
 import sqlite3
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 
 class Store:
@@ -56,8 +58,7 @@ class Store:
 
     def set_kv(self, key: str, value: Any) -> None:
         self._db.execute(
-            "INSERT INTO kv (key, value) VALUES (?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            "INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, json.dumps(value)),
         )
 

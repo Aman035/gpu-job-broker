@@ -1,4 +1,4 @@
-"""Fake cloud provider.
+"""Fake cloud provider implementing `broker.cloud.CloudProvider`.
 
 It behaves like an external system: it has its own store, it keeps billing
 nodes while the broker is down, and it only knows time through the `now`
@@ -8,28 +8,18 @@ Every random outcome is derived from a seeded hash of a stable key (the
 launch token, or a time bucket), never from a shared RNG stream. That makes
 runs reproducible and means there is no RNG state to lose on restart.
 """
+
 from __future__ import annotations
 
 import random
 from dataclasses import asdict, dataclass
 
-from .models import NODE_TYPES, node_price
-from .store import Store
+from ..cloud import CapacityUnavailable, NodeStatus, QuotaExceeded
+from ..models import NODE_TYPES, node_price
+from ..store import Store
 
 MINUTE = 60.0
 HOUR = 3600.0
-
-
-class ProviderError(Exception):
-    pass
-
-
-class CapacityUnavailable(ProviderError):
-    """The provider has no capacity of the requested type right now."""
-
-
-class QuotaExceeded(ProviderError):
-    """The account already has the maximum number of nodes alive."""
 
 
 @dataclass
@@ -67,24 +57,11 @@ class ProviderNode:
     termination_reason: str | None = None
 
 
-@dataclass
-class NodeStatus:
-    id: str
-    token: str
-    status: str  # pending | running | reclaim_notice | terminated
-    launched_at: float
-    ready_at: float | None
-    terminated_at: float | None
-    termination_reason: str | None
-
-
 class FakeProvider:
     def __init__(self, config: ProviderConfig | None = None, store: Store | None = None) -> None:
         self.config = config or ProviderConfig()
         self.store = store or Store()
-        self._nodes: dict[str, ProviderNode] = {
-            d["id"]: ProviderNode(**d) for d in self.store.all("pnode")
-        }
+        self._nodes: dict[str, ProviderNode] = {d["id"]: ProviderNode(**d) for d in self.store.all("pnode")}
 
     # ---- deterministic randomness ---------------------------------------
 
@@ -231,4 +208,3 @@ class FakeProvider:
     def _save(self, node: ProviderNode) -> None:
         self.store.put("pnode", node.id, asdict(node))
         self.store.commit()
-

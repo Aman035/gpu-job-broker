@@ -1,8 +1,8 @@
 import pytest
 
-from broker.broker import Broker
 from broker.config import BrokerConfig
-from broker.provider import FakeProvider, ProviderConfig
+from broker.service import Broker
+from broker.sim.fake_provider import FakeProvider, ProviderConfig
 from broker.store import Store
 
 
