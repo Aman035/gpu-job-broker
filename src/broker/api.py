@@ -20,6 +20,7 @@ from .broker import Broker, IdempotencyConflict, InvalidTransition, NotFound, Va
 from .config import BrokerConfig
 from .models import Job, JobStatus, Node
 from .provider import FakeProvider
+from .retrieval import FailureIndex
 from .store import Store
 
 
@@ -45,6 +46,11 @@ class SubmitJob(BaseModel):
 
 class CompleteJob(BaseModel):
     outcome: Literal["succeeded", "failed"]
+
+
+class SearchFailures(BaseModel):
+    query: str = Field(min_length=1, max_length=50_000, description="free-text question or a failed job's log")
+    k: int = Field(5, ge=1, le=20)
 
 
 class AdvanceClock(BaseModel):
@@ -89,9 +95,10 @@ def node_view(broker: Broker, node: Node) -> dict:
     }
 
 
-def create_app(broker: Broker) -> FastAPI:
+def create_app(broker: Broker, failures: FailureIndex | None = None) -> FastAPI:
     app = FastAPI(title="Job Broker", version="0.1.0")
     lock = threading.Lock()
+    failures = failures or FailureIndex.from_jsonl()
 
     @app.exception_handler(ValidationError)
     def _validation(_, exc):
@@ -176,6 +183,11 @@ def create_app(broker: Broker) -> FastAPI:
         with lock:
             broker.advance(body.seconds)
             return {"now": iso(broker.now)}
+
+    @app.post("/failures/search")
+    def search_failures(body: SearchFailures):
+        """Past failures similar to a log or question, with their fixes. Read-only, no lock needed."""
+        return failures.search(body.query, k=body.k).to_dict()
 
     return app
 

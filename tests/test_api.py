@@ -77,3 +77,12 @@ def test_cost_report(client):
     ).json()
     assert window["total_cost"] == pytest.approx(0.5)
     assert client.get("/reports/cost", params={"start": "yesterday"}).status_code == 422
+
+
+def test_failure_search(client):
+    r = client.post("/failures/search", json={"query": "container killed with exit code 137", "k": 3})
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["matches"]) == 3 and not body["abstained"]
+    assert body["suggested_resolution"].startswith("Reduce batch size")
+    assert client.post("/failures/search", json={"query": ""}).status_code == 422

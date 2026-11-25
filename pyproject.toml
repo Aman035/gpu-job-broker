@@ -22,6 +22,7 @@ dev = [
 [project.scripts]
 broker-replay = "broker.replay:main"
 broker-serve = "broker.api:main"
+broker-eval-retrieval = "broker.retrieval_eval:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

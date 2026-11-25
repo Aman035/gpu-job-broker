@@ -52,6 +52,18 @@ What the replay shows:
 - **Interruptible nodes for `low` jobs save about 7%** of the bill with no
   measurable effect on waits.
 
+## Failure retrieval
+
+```bash
+broker-eval-retrieval      # P@3 / P@5 and abstention on all test sets, per pipeline step
+```
+
+`POST /failures/search` returns similar past failures for a question or a
+pasted log. On the 24 given questions it scores **P@3 1.00, P@5 0.99**, and it
+returns nothing for all 6 questions with no relevant log. On 24 held-out
+paraphrases written before the pipeline was built it scores **0.97 / 0.97**.
+Design, ablation and limits: [docs/RETRIEVAL.md](docs/RETRIEVAL.md).
+
 ## HTTP API
 
 Times are ISO 8601 UTC. Simulated time moves only through `POST /clock/advance`.
@@ -68,6 +80,7 @@ Times are ISO 8601 UTC. Simulated time moves only through `POST /clock/advance`.
 | `GET` | `/reports/cost?start=&end=` | GPU-hours and cost per team for a window, split into used and idle cost. |
 | `GET` | `/clock` | Current simulated time. |
 | `POST` | `/clock/advance` | `{seconds}`: process every event up to that point. |
+| `POST` | `/failures/search` | `{query, k}`: similar past failures for a question or a pasted log, with their fixes, a suggested fix and whether it abstained. |
 
 Errors: `422` invalid input, `404` unknown job, `409` invalid state change or
 idempotency conflict.
