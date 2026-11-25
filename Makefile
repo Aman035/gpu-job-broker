@@ -2,7 +2,7 @@ PYTHON ?= python3
 VENV   ?= .venv
 BIN     = $(VENV)/bin
 
-.PHONY: install test lint typecheck check serve replay eval docker clean
+.PHONY: install test lint typecheck check serve replay eval clean
 
 install:            ## create the virtualenv and install with dev tools
 	$(PYTHON) -m venv $(VENV)
@@ -28,9 +28,6 @@ replay:             ## regenerate docs/RESULTS.md
 
 eval:               ## regenerate docs/RETRIEVAL_RESULTS.md
 	$(BIN)/broker-eval-retrieval --out docs/RETRIEVAL_RESULTS.md
-
-docker:
-	docker build -t job-broker .
 
 clean:
 	rm -rf $(VENV) var .pytest_cache .mypy_cache .ruff_cache src/*.egg-info
